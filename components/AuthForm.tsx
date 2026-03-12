@@ -1,14 +1,50 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface AuthFormProps {
   mode: 'login' | 'register';
 }
 
+/**
+ * リダイレクトURLの安全性を検証
+ * 同一ドメインまたは相対パスのみ許可（オープンリダイレクト脆弱性対策）
+ */
+function isValidRedirectUrl(url: string | null): boolean {
+  if (!url) return false;
+
+  // 相対パス（/で始まる）は許可
+  if (url.startsWith('/') && !url.startsWith('//')) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const currentHost = typeof window !== 'undefined' ? window.location.host : '';
+
+    // 同一ドメインのみ許可
+    if (parsed.host === currentHost) {
+      return true;
+    }
+
+    // 許可されたドメインリスト（OAuth認可フロー用）
+    const allowedHosts = [
+      'auth.senku.work',
+      'localhost:3019',
+    ];
+
+    return allowedHosts.includes(parsed.host);
+  } catch {
+    // URL解析失敗は不正とみなす
+    return false;
+  }
+}
+
 export default function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectUrl = searchParams.get('redirect');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -37,12 +73,20 @@ export default function AuthForm({ mode }: AuthFormProps) {
       }
 
       if (mode === 'register') {
-        // 登録成功後、ログイン画面へ
-        router.push('/login?registered=true');
+        // 登録成功後、ログイン画面へ（redirectがあれば引き継ぐ）
+        const loginUrl = isValidRedirectUrl(redirectUrl)
+          ? `/login?redirect=${encodeURIComponent(redirectUrl!)}&registered=true`
+          : '/login?registered=true';
+        router.push(loginUrl);
       } else {
-        // ログイン成功後、ダッシュボードへ
-        router.push('/dashboard');
-        router.refresh();
+        // ログイン成功後、redirectがあればそこへ、なければダッシュボードへ
+        if (isValidRedirectUrl(redirectUrl)) {
+          // 検証済みの安全なリダイレクト
+          window.location.href = redirectUrl!;
+        } else {
+          router.push('/dashboard');
+          router.refresh();
+        }
       }
     } catch {
       setError('Network error. Please try again.');

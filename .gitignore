@@ -17,6 +17,11 @@ db/
 *.db
 *.db-journal
 
+# Cryptographic keys (NEVER commit private keys)
+keys/
+*.pem
+*.key
+
 # Debug logs
 npm-debug.log*
 yarn-debug.log*

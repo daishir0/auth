@@ -15,6 +15,7 @@ model User {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   refreshTokens  RefreshToken[]
+  authorizationCodes AuthorizationCode[]
 }
 
 model RefreshToken {
@@ -23,5 +24,65 @@ model RefreshToken {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
+  createdAt DateTime @default(now())
+  // OAuth関連
+  clientId  String?
+  client    OAuthClient? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  scope     String?
+}
+
+// OAuth 2.0 クライアント
+model OAuthClient {
+  id           String   @id @default(uuid())
+  clientId     String   @unique // client_id
+  clientSecret String   // ハッシュ化されたsecret
+  name         String
+  description  String?
+  redirectUris String   // カンマ区切り
+  scopes       String   @default("openid profile email") // 許可されたスコープ
+  grantTypes   String   @default("authorization_code,refresh_token") // 許可されたgrant_types
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  authorizationCodes AuthorizationCode[]
+  refreshTokens      RefreshToken[]
+}
+
+// 認可コード（Authorization Code Flow）
+model AuthorizationCode {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  clientId        String
+  client          OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  redirectUri     String
+  scope           String
+  codeChallenge   String?  // PKCE
+  codeChallengeMethod String? // S256 or plain
+  nonce           String?  // OIDC
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  usedAt          DateTime? // 使用済みフラグ
+}
+
+// セキュリティログ
+model SecurityLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String   // login_success, login_failed, logout, token_refresh, etc.
+  ipAddress String?
+  userAgent String?
+  details   String?  // JSON形式の詳細情報
+  createdAt DateTime @default(now())
+}
+
+// レート制限（メモリ内管理の補助）
+model RateLimitEntry {
+  id        String   @id @default(uuid())
+  key       String   @unique // IP or email
+  count     Int      @default(1)
+  resetAt   DateTime
   createdAt DateTime @default(now())
 }
