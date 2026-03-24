@@ -31,6 +31,8 @@ function isValidRedirectUrl(url: string | null): boolean {
     // 許可されたドメインリスト（OAuth認可フロー用）
     const allowedHosts = [
       'auth.senku.work',
+      'policy-manager.senku.work',
+      'localhost:3018',
       'localhost:3019',
     ];
 

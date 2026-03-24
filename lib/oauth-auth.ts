@@ -5,6 +5,7 @@
 
 import { SignJWT, jwtVerify, importPKCS8, importSPKI, exportJWK } from 'jose';
 import { randomBytes, createHash, generateKeyPairSync } from 'crypto';
+import * as argon2 from 'argon2';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
@@ -293,14 +294,23 @@ export function verifyCodeChallenge(
 }
 
 /**
- * クライアント認証を検証
+ * クライアント認証を検証（Argon2ハッシュ対応）
  */
-export function verifyClientCredentials(
+export async function verifyClientCredentials(
   providedSecret: string,
   storedSecretHash: string
-): boolean {
-  const hash = createHash('sha256').update(providedSecret).digest('hex');
-  return hash === storedSecretHash;
+): Promise<boolean> {
+  try {
+    // Argon2ハッシュの場合
+    if (storedSecretHash.startsWith('$argon2')) {
+      return await argon2.verify(storedSecretHash, providedSecret);
+    }
+    // SHA256ハッシュの場合（後方互換性）
+    const hash = createHash('sha256').update(providedSecret).digest('hex');
+    return hash === storedSecretHash;
+  } catch {
+    return false;
+  }
 }
 
 /**

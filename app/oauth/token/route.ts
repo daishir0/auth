@@ -79,6 +79,23 @@ function getClientCredentials(request: NextRequest, body: TokenRequest): { clien
   };
 }
 
+// ユーザーのロール名を取得するヘルパー関数
+async function getUserRoles(userId: string): Promise<string[]> {
+  const userRoles = await prisma.userGlobalRole.findMany({
+    where: {
+      userId,
+      OR: [
+        { validTo: null },
+        { validTo: { gt: new Date() } },
+      ],
+    },
+    include: {
+      role: true,
+    },
+  });
+  return userRoles.map(ur => ur.role.name);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await parseRequest(request);
@@ -111,7 +128,7 @@ export async function POST(request: NextRequest) {
     }
 
     // クライアントシークレットを検証
-    if (clientSecret && !verifyClientCredentials(clientSecret, client.clientSecret)) {
+    if (clientSecret && !(await verifyClientCredentials(clientSecret, client.clientSecret))) {
       return NextResponse.json(
         { error: 'invalid_client', error_description: 'Invalid client credentials' },
         { status: 401, headers: corsHeaders() }
@@ -119,7 +136,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Grant Typeに応じて処理
-    const allowedGrants = client.grantTypes.split(',').map(g => g.trim());
+    const allowedGrants = client.grantTypes;
 
     switch (body.grant_type) {
       case 'authorization_code':
@@ -243,6 +260,14 @@ async function handleAuthorizationCodeGrant(
     }
   }
 
+  // ユーザーがアクティブか確認
+  if (!authCode.user.isActive) {
+    return NextResponse.json(
+      { error: 'invalid_grant', error_description: 'User account is disabled' },
+      { status: 400, headers: corsHeaders() }
+    );
+  }
+
   // 認可コードを使用済みに
   await prisma.authorizationCode.update({
     where: { id: authCode.id },
@@ -251,7 +276,7 @@ async function handleAuthorizationCodeGrant(
 
   // トークンを生成
   const user = authCode.user;
-  const roles = user.roles.split(',').map(r => r.trim());
+  const roles = await getUserRoles(user.id);
 
   const tokenPayload = {
     userId: user.id,
@@ -280,7 +305,7 @@ async function handleAuthorizationCodeGrant(
       action: 'oauth_token_issued',
       ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
       userAgent: request.headers.get('user-agent') || 'unknown',
-      details: JSON.stringify({ client_id: client.clientId, scope: authCode.scope, grant_type: 'authorization_code' }),
+      details: { client_id: client.clientId, scope: authCode.scope, grant_type: 'authorization_code' },
     },
   });
 
@@ -347,9 +372,17 @@ async function handleRefreshTokenGrant(
     );
   }
 
+  // ユーザーがアクティブか確認
+  if (!storedToken.user.isActive) {
+    return NextResponse.json(
+      { error: 'invalid_grant', error_description: 'User account is disabled' },
+      { status: 400, headers: corsHeaders() }
+    );
+  }
+
   // 新しいトークンを生成
   const user = storedToken.user;
-  const roles = user.roles.split(',').map(r => r.trim());
+  const roles = await getUserRoles(user.id);
   const scope = body.scope || storedToken.scope || 'openid';
 
   const tokenPayload = {

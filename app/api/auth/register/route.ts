@@ -4,7 +4,7 @@ import { hashPassword } from '@/lib/password';
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json();
+    const { email, password, displayName, firstName, lastName } = await request.json();
 
     // バリデーション
     if (!email || !password) {
@@ -36,12 +36,48 @@ export async function POST(request: NextRequest) {
     // パスワードをハッシュ化
     const hashedPassword = await hashPassword(password);
 
-    // ユーザー作成
+    // デフォルトロール（user）を取得
+    const userRole = await prisma.globalRole.findUnique({
+      where: { name: 'user' },
+    });
+
+    if (!userRole) {
+      return NextResponse.json(
+        { error: 'Default role not found. Please run seed first.' },
+        { status: 500 }
+      );
+    }
+
+    // ユーザー作成（トランザクション）
     const user = await prisma.user.create({
       data: {
         email,
-        hashedPassword,
-        roles: 'user',
+        isActive: true,
+        credential: {
+          create: {
+            hashedPassword,
+          },
+        },
+        profile: {
+          create: {
+            displayName: displayName || email.split('@')[0],
+            firstName,
+            lastName,
+          },
+        },
+        globalRoles: {
+          create: {
+            roleId: userRole.id,
+          },
+        },
+      },
+      include: {
+        profile: true,
+        globalRoles: {
+          include: {
+            role: true,
+          },
+        },
       },
     });
 
@@ -51,7 +87,8 @@ export async function POST(request: NextRequest) {
         user: {
           id: user.id,
           email: user.email,
-          roles: user.roles.split(','),
+          displayName: user.profile?.displayName,
+          roles: user.globalRoles.map(ur => ur.role.name),
           createdAt: user.createdAt,
         },
       },

@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
         where: { clientId },
       });
 
-      if (!client || !verifyClientCredentials(clientSecret, client.clientSecret)) {
+      if (!client || !(await verifyClientCredentials(clientSecret, client.clientSecret))) {
         return NextResponse.json(
           { error: 'invalid_client', error_description: 'Invalid client credentials' },
           { status: 401, headers: corsHeaders() }

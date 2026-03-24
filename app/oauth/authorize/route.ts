@@ -83,6 +83,18 @@ async function getCurrentUser(request: NextRequest): Promise<{ userId: string; e
     payload = await verifyLegacyAccessToken(token);
   }
 
+  if (!payload) return null;
+
+  // ユーザーがアクティブか確認
+  const user = await prisma.user.findUnique({
+    where: { id: payload.userId },
+    select: { isActive: true },
+  });
+
+  if (!user || !user.isActive) {
+    return null;
+  }
+
   return payload;
 }
 
@@ -115,18 +127,17 @@ export async function GET(request: NextRequest) {
     return buildErrorResponse(params.redirect_uri, 'invalid_client', 'Client not found or inactive', params.state);
   }
 
-  // redirect_uriを検証
-  const allowedUris = client.redirectUris.split(',').map(u => u.trim());
-  if (!allowedUris.includes(params.redirect_uri)) {
+  // redirect_uriを検証（配列形式）
+  if (!client.redirectUris.includes(params.redirect_uri)) {
     return NextResponse.json(
       { error: 'invalid_request', error_description: 'Invalid redirect_uri' },
       { status: 400 }
     );
   }
 
-  // スコープを検証
+  // スコープを検証（配列形式）
   const requestedScopes = params.scope?.split(' ') || ['openid'];
-  const allowedScopes = client.scopes.split(',').map(s => s.trim()).concat(['openid', 'profile', 'email', 'offline_access']);
+  const allowedScopes = [...client.scopes, 'openid', 'profile', 'email', 'offline_access', 'custom'];
   const invalidScopes = requestedScopes.filter(s => !allowedScopes.includes(s));
   if (invalidScopes.length > 0) {
     return buildErrorResponse(params.redirect_uri, 'invalid_scope', `Invalid scope: ${invalidScopes.join(', ')}`, params.state);
@@ -171,7 +182,7 @@ export async function GET(request: NextRequest) {
       action: 'oauth_authorize',
       ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
       userAgent: request.headers.get('user-agent') || 'unknown',
-      details: JSON.stringify({ client_id: params.client_id, scope: params.scope }),
+      details: { client_id: params.client_id, scope: params.scope },
     },
   });
 

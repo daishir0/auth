@@ -35,12 +35,31 @@ export async function GET(request: NextRequest) {
     // DBからユーザー情報を取得
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: {
-        id: true,
-        email: true,
-        roles: true,
-        createdAt: true,
-        updatedAt: true,
+      include: {
+        profile: true,
+        globalRoles: {
+          include: {
+            role: true,
+          },
+          where: {
+            OR: [
+              { validTo: null },
+              { validTo: { gt: new Date() } },
+            ],
+          },
+        },
+        organizationMemberships: {
+          include: {
+            organization: true,
+            position: true,
+          },
+          where: {
+            OR: [
+              { endDate: null },
+              { endDate: { gt: new Date() } },
+            ],
+          },
+        },
       },
     });
 
@@ -51,11 +70,38 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    if (!user.isActive) {
+      return NextResponse.json(
+        { error: 'Account is disabled' },
+        { status: 401 }
+      );
+    }
+
     return NextResponse.json({
       user: {
         id: user.id,
         email: user.email,
-        roles: user.roles.split(','),
+        isActive: user.isActive,
+        profile: user.profile ? {
+          displayName: user.profile.displayName,
+          firstName: user.profile.firstName,
+          lastName: user.profile.lastName,
+          avatarUrl: user.profile.avatarUrl,
+          phone: user.profile.phone,
+          hireDate: user.profile.hireDate,
+        } : null,
+        roles: user.globalRoles.map(ur => ur.role.name),
+        organizations: user.organizationMemberships.map(om => ({
+          id: om.organization.id,
+          name: om.organization.name,
+          code: om.organization.code,
+          isPrimary: om.isPrimary,
+          position: om.position ? {
+            id: om.position.id,
+            name: om.position.name,
+            code: om.position.code,
+          } : null,
+        })),
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },

@@ -3,44 +3,224 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:../db/auth.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
+
+// ========================================
+// ユーザー管理
+// ========================================
 
 model User {
-  id             String         @id @default(uuid())
-  email          String         @unique
-  hashedPassword String
-  roles          String         @default("user") // カンマ区切りで複数ロール
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  refreshTokens  RefreshToken[]
-  authorizationCodes AuthorizationCode[]
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime? // 論理削除
+
+  // リレーション
+  credential           UserCredential?
+  profile              UserProfile?
+  refreshTokens        RefreshToken[]
+  authorizationCodes   AuthorizationCode[]
+  organizationMemberships OrganizationMembership[]
+  globalRoles          UserGlobalRole[]
+  idMappings           UserIdMapping[]
 }
 
-model RefreshToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  // OAuth関連
-  clientId  String?
-  client    OAuthClient? @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  scope     String?
+// 認証情報（パスワード等を分離）
+model UserCredential {
+  id                  String    @id @default(uuid()) @db.Uuid
+  userId              String    @unique @db.Uuid
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hashedPassword      String
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  mfaEnabled          Boolean   @default(false)
+  mfaSecret           String?
+  passwordChangedAt   DateTime  @default(now())
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 }
+
+// ユーザープロフィール
+model UserProfile {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @unique @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName String?
+  firstName   String?
+  lastName    String?
+  avatarUrl   String?
+  phone       String?
+  hireDate    DateTime?
+  metadata    Json?     // 追加属性用
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ========================================
+// 組織・役職管理
+// ========================================
+
+// 組織マスタ
+model Organization {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  code        String   @unique
+  description String?
+  parentId    String?  @db.Uuid
+  parent      Organization?  @relation("OrganizationHierarchy", fields: [parentId], references: [id])
+  children    Organization[] @relation("OrganizationHierarchy")
+  level       Int      @default(0) // 階層レベル
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // リレーション
+  memberships OrganizationMembership[]
+
+  @@index([parentId])
+  @@index([code])
+}
+
+// 役職マスタ
+model Position {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  code        String   @unique
+  level       Int      @default(0) // 役職レベル（高いほど上位）
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // リレーション
+  memberships OrganizationMembership[]
+
+  @@index([code])
+}
+
+// 組織所属（ユーザーと組織の多対多）
+model OrganizationMembership {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @db.Uuid
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String    @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  positionId     String?   @db.Uuid
+  position       Position? @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  isPrimary      Boolean   @default(false) // 主所属フラグ
+  startDate      DateTime  @default(now())
+  endDate        DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([userId, organizationId])
+  @@index([userId])
+  @@index([organizationId])
+  @@index([positionId])
+}
+
+// ========================================
+// グローバルロール・権限管理
+// ========================================
+
+// グローバルロールマスタ
+model GlobalRole {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique // システム識別名 (super_admin, admin, user)
+  displayName String   // 表示名
+  description String?
+  isSystem    Boolean  @default(false) // システムロール（削除不可）
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // リレーション
+  permissions GlobalRolePermission[]
+  users       UserGlobalRole[]
+}
+
+// グローバル権限マスタ
+model GlobalPermission {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique // システム識別名 (users:read, users:write)
+  displayName String   // 表示名
+  category    String   // カテゴリ (users, organizations, roles)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // リレーション
+  roles GlobalRolePermission[]
+
+  @@index([category])
+}
+
+// ロールと権限の関連
+model GlobalRolePermission {
+  id           String   @id @default(uuid()) @db.Uuid
+  roleId       String   @db.Uuid
+  role         GlobalRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String   @db.Uuid
+  permission   GlobalPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+// ユーザーとロールの関連（多対多）
+model UserGlobalRole {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId    String    @db.Uuid
+  role      GlobalRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  validFrom DateTime  @default(now())
+  validTo   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+}
+
+// ========================================
+// ID移行用マッピング
+// ========================================
+
+model UserIdMapping {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @db.Uuid
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  legacyId     String   // 旧システムのID
+  sourceSystem String   // 移行元システム名 (policy-manager, etc.)
+  createdAt    DateTime @default(now())
+
+  @@unique([legacyId, sourceSystem])
+  @@index([userId])
+  @@index([legacyId])
+}
+
+// ========================================
+// OAuth 2.0 / OIDC
+// ========================================
 
 // OAuth 2.0 クライアント
 model OAuthClient {
-  id           String   @id @default(uuid())
-  clientId     String   @unique // client_id
+  id           String   @id @default(uuid()) @db.Uuid
+  clientId     String   @unique
   clientSecret String   // ハッシュ化されたsecret
   name         String
   description  String?
-  redirectUris String   // カンマ区切り
-  scopes       String   @default("openid profile email") // 許可されたスコープ
-  grantTypes   String   @default("authorization_code,refresh_token") // 許可されたgrant_types
+  redirectUris String[] // 配列形式に変更
+  scopes       String[] @default(["openid", "profile", "email"])
+  grantTypes   String[] @default(["authorization_code", "refresh_token"])
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -51,38 +231,68 @@ model OAuthClient {
 
 // 認可コード（Authorization Code Flow）
 model AuthorizationCode {
-  id              String   @id @default(uuid())
-  code            String   @unique
-  clientId        String
-  client          OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  redirectUri     String
-  scope           String
-  codeChallenge   String?  // PKCE
-  codeChallengeMethod String? // S256 or plain
-  nonce           String?  // OIDC
-  expiresAt       DateTime
-  createdAt       DateTime @default(now())
-  usedAt          DateTime? // 使用済みフラグ
+  id                  String    @id @default(uuid()) @db.Uuid
+  code                String    @unique
+  clientId            String    @db.Uuid
+  client              OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userId              String    @db.Uuid
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  redirectUri         String
+  scope               String
+  codeChallenge       String?   // PKCE
+  codeChallengeMethod String?   // S256 or plain
+  nonce               String?   // OIDC
+  expiresAt           DateTime
+  createdAt           DateTime  @default(now())
+  usedAt              DateTime? // 使用済みフラグ
+
+  @@index([code])
+  @@index([clientId])
+  @@index([userId])
 }
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  token     String    @unique
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  clientId  String?   @db.Uuid
+  client    OAuthClient? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  scope     String?
+
+  @@index([token])
+  @@index([userId])
+}
+
+// ========================================
+// セキュリティ・監査
+// ========================================
 
 // セキュリティログ
 model SecurityLog {
-  id        String   @id @default(uuid())
-  userId    String?
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @db.Uuid
   action    String   // login_success, login_failed, logout, token_refresh, etc.
   ipAddress String?
   userAgent String?
-  details   String?  // JSON形式の詳細情報
+  details   Json?    // 詳細情報
   createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
 }
 
-// レート制限（メモリ内管理の補助）
+// レート制限
 model RateLimitEntry {
-  id        String   @id @default(uuid())
+  id        String   @id @default(uuid()) @db.Uuid
   key       String   @unique // IP or email
   count     Int      @default(1)
   resetAt   DateTime
   createdAt DateTime @default(now())
+
+  @@index([key])
+  @@index([resetAt])
 }

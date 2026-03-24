@@ -31,9 +31,9 @@ async function main() {
     console.log(`  ID: ${existingClient.id}`);
     console.log(`  Client ID: ${existingClient.clientId}`);
     console.log(`  Name: ${existingClient.name}`);
-    console.log(`  Redirect URIs: ${existingClient.redirectUris}`);
-    console.log(`  Scopes: ${existingClient.scopes}`);
-    console.log(`  Grant Types: ${existingClient.grantTypes}`);
+    console.log(`  Redirect URIs: ${existingClient.redirectUris.join(', ')}`);
+    console.log(`  Scopes: ${existingClient.scopes.join(', ')}`);
+    console.log(`  Grant Types: ${existingClient.grantTypes.join(', ')}`);
   } else {
     // 新しいクライアントを作成
     const client = await prisma.oAuthClient.create({
@@ -42,9 +42,13 @@ async function main() {
         clientSecret: hashClientSecret(testClientSecret),
         name: 'テストアプリケーション',
         description: 'OAuth 2.0テスト用クライアント',
-        redirectUris: 'http://localhost:8080/callback,http://localhost:3000/callback,https://oauth.pstmn.io/v1/callback',
-        scopes: 'openid,profile,email,offline_access',
-        grantTypes: 'authorization_code,refresh_token',
+        redirectUris: [
+          'http://localhost:8080/callback',
+          'http://localhost:3000/callback',
+          'https://oauth.pstmn.io/v1/callback',
+        ],
+        scopes: ['openid', 'profile', 'email', 'offline_access'],
+        grantTypes: ['authorization_code', 'refresh_token'],
         isActive: true,
       },
     });
@@ -55,9 +59,9 @@ async function main() {
     console.log(`Client ID: ${testClientId}`);
     console.log(`Client Secret: ${testClientSecret}`);
     console.log(`Name: ${client.name}`);
-    console.log(`Redirect URIs: ${client.redirectUris}`);
-    console.log(`Scopes: ${client.scopes}`);
-    console.log(`Grant Types: ${client.grantTypes}`);
+    console.log(`Redirect URIs: ${client.redirectUris.join(', ')}`);
+    console.log(`Scopes: ${client.scopes.join(', ')}`);
+    console.log(`Grant Types: ${client.grantTypes.join(', ')}`);
     console.log('');
     console.log('※ この情報はOAuthテストに使用します。');
   }
@@ -77,9 +81,9 @@ async function main() {
         clientSecret: hashClientSecret(cliClientSecret),
         name: 'CLIテストクライアント',
         description: 'OAuth CLI検証用クライアント（PKCE対応）',
-        redirectUris: 'http://localhost:9999/callback',
-        scopes: 'openid,profile,email,offline_access',
-        grantTypes: 'authorization_code,refresh_token',
+        redirectUris: ['http://localhost:9999/callback'],
+        scopes: ['openid', 'profile', 'email', 'offline_access'],
+        grantTypes: ['authorization_code', 'refresh_token'],
         isActive: true,
       },
     });
@@ -103,8 +107,8 @@ async function main() {
     console.log('=== Policy Manager クライアント情報 ===');
     console.log(`Client ID: ${existingPolicyManagerClient.clientId}`);
     console.log(`Name: ${existingPolicyManagerClient.name}`);
-    console.log(`Redirect URIs: ${existingPolicyManagerClient.redirectUris}`);
-    console.log(`Scopes: ${existingPolicyManagerClient.scopes}`);
+    console.log(`Redirect URIs: ${existingPolicyManagerClient.redirectUris.join(', ')}`);
+    console.log(`Scopes: ${existingPolicyManagerClient.scopes.join(', ')}`);
     console.log('※ シークレットは既存のものを使用してください');
   } else {
     await prisma.oAuthClient.create({
@@ -113,9 +117,12 @@ async function main() {
         clientSecret: hashClientSecret(policyManagerClientSecret),
         name: 'Policy Manager',
         description: 'ポリシー管理システム（OAuth 2.0 / OIDC認証）',
-        redirectUris: 'https://policy-manager.senku.work/api/auth/callback/senku-auth,http://localhost:3018/api/auth/callback/senku-auth',
-        scopes: 'openid,profile,email',
-        grantTypes: 'authorization_code,refresh_token',
+        redirectUris: [
+          'https://policy-manager.senku.work/api/auth/callback/senku-auth',
+          'http://localhost:3018/api/auth/callback/senku-auth',
+        ],
+        scopes: ['openid', 'profile', 'email', 'custom'],
+        grantTypes: ['authorization_code', 'refresh_token'],
         isActive: true,
       },
     });
@@ -124,8 +131,8 @@ async function main() {
     console.log('=== Policy Manager クライアント情報（新規作成） ===');
     console.log(`Client ID: ${policyManagerClientId}`);
     console.log(`Client Secret: ${policyManagerClientSecret}`);
-    console.log(`Redirect URIs: https://policy-manager.senku.work/api/auth/callback/senku-auth,http://localhost:3018/api/auth/callback/senku-auth`);
-    console.log(`Scopes: openid,profile,email`);
+    console.log(`Redirect URIs: https://policy-manager.senku.work/api/auth/callback/senku-auth, http://localhost:3018/api/auth/callback/senku-auth`);
+    console.log(`Scopes: openid, profile, email, custom`);
     console.log('');
     console.log('*** このシークレットを policy-manager の .env に設定してください ***');
   }

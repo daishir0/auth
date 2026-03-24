@@ -32,10 +32,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // DBからリフレッシュトークン検索
+    // DBからリフレッシュトークン検索（ユーザーとロールを含む）
     const storedToken = await prisma.refreshToken.findUnique({
       where: { token: refreshTokenValue },
-      include: { user: true },
+      include: {
+        user: {
+          include: {
+            globalRoles: {
+              include: {
+                role: true,
+              },
+              where: {
+                OR: [
+                  { validTo: null },
+                  { validTo: { gt: new Date() } },
+                ],
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!storedToken) {
@@ -58,11 +74,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ユーザーがアクティブか確認
+    if (!storedToken.user.isActive) {
+      return NextResponse.json(
+        { error: 'Account is disabled' },
+        { status: 401 }
+      );
+    }
+
+    // ロール名配列を取得
+    const roles = storedToken.user.globalRoles.map(ur => ur.role.name);
+
     // 新しいトークンを生成
     const newAccessToken = await generateAccessToken({
       userId: storedToken.user.id,
       email: storedToken.user.email,
-      roles: storedToken.user.roles.split(','),
+      roles,
     });
 
     const newRefreshToken = generateRefreshToken();
@@ -81,6 +108,16 @@ export async function POST(request: NextRequest) {
         },
       }),
     ]);
+
+    // セキュリティログ
+    await prisma.securityLog.create({
+      data: {
+        userId: storedToken.user.id,
+        action: 'token_refresh',
+        ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip'),
+        userAgent: request.headers.get('user-agent'),
+      },
+    });
 
     // Cookieを更新
     const cookieStore = await cookies();
