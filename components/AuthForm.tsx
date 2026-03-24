@@ -29,12 +29,11 @@ function isValidRedirectUrl(url: string | null): boolean {
     }
 
     // 許可されたドメインリスト（OAuth認可フロー用）
-    const allowedHosts = [
-      'auth.senku.work',
-      'policy-manager.senku.work',
-      'localhost:3018',
-      'localhost:3019',
-    ];
+    // 環境変数から取得（カンマ区切り）
+    const allowedHosts = (process.env.NEXT_PUBLIC_ALLOWED_REDIRECT_HOSTS || '')
+      .split(',')
+      .map(h => h.trim())
+      .filter(Boolean);
 
     return allowedHosts.includes(parsed.host);
   } catch {

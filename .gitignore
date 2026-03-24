@@ -46,5 +46,9 @@ Thumbs.db
 # Testing
 coverage/
 
+# Playwright test results
+test-results/
+playwright-report/
+
 # Environment variables
 .env

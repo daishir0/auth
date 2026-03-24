@@ -135,7 +135,10 @@ async function handleUserInfo(request: NextRequest) {
   };
 
   // プロフィール情報（profile スコープ）
-  const baseUrl = process.env.NEXTAUTH_URL || process.env.AUTH_URL || 'https://auth.senku.work';
+  const baseUrl = process.env.AUTH_URL;
+  if (!baseUrl) {
+    throw new Error('AUTH_URL environment variable is required');
+  }
 
   if (user.profile) {
     userInfo.name = user.profile.displayName || `${user.profile.firstName || ''} ${user.profile.lastName || ''}`.trim() || user.email.split('@')[0];

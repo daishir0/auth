@@ -152,8 +152,12 @@ async function main() {
   // ========================================
   // スーパー管理者ユーザーの作成
   // ========================================
-  const superAdminEmail = 'admin@senku.work';
-  const hashedPassword = await argon2.hash('admin123');
+  const superAdminEmail = process.env.SEED_ADMIN_EMAIL || 'admin@example.com';
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!adminPassword) {
+    throw new Error('SEED_ADMIN_PASSWORD environment variable is required');
+  }
+  const hashedPassword = await argon2.hash(adminPassword);
 
   const superAdminRole = await prisma.globalRole.findUnique({
     where: { name: 'super_admin' },
@@ -193,8 +197,12 @@ async function main() {
   // ========================================
   // テスト用一般ユーザーの作成
   // ========================================
-  const testUserEmail = 'user@senku.work';
-  const testHashedPassword = await argon2.hash('user1234');
+  const testUserEmail = process.env.SEED_USER_EMAIL || 'user@example.com';
+  const userPassword = process.env.SEED_USER_PASSWORD;
+  if (!userPassword) {
+    throw new Error('SEED_USER_PASSWORD environment variable is required');
+  }
+  const testHashedPassword = await argon2.hash(userPassword);
 
   const userRole = await prisma.globalRole.findUnique({
     where: { name: 'user' },
@@ -248,6 +256,17 @@ async function main() {
   const clientSecret = 'pm-secret-c0643156fa77a94d2030d289bb163b7d';
   const hashedSecret = await argon2.hash(clientSecret);
 
+  // リダイレクトURIを環境変数から取得（カンマ区切り）
+  const redirectUris = (process.env.SEED_OAUTH_REDIRECT_URIS || '')
+    .split(',')
+    .map(uri => uri.trim())
+    .filter(Boolean);
+
+  // デフォルト値（環境変数が設定されていない場合）
+  const defaultRedirectUris = [
+    'http://localhost:3018/api/auth/callback/auth-provider',
+  ];
+
   await prisma.oAuthClient.upsert({
     where: { clientId: 'policy-manager' },
     update: {},
@@ -256,10 +275,7 @@ async function main() {
       clientSecret: hashedSecret,
       name: 'Policy Manager',
       description: 'ポリシー管理システム',
-      redirectUris: [
-        'https://policy-manager.senku.work/api/auth/callback/senku',
-        'http://localhost:3018/api/auth/callback/senku',
-      ],
+      redirectUris: redirectUris.length > 0 ? redirectUris : defaultRedirectUris,
       scopes: ['openid', 'profile', 'email', 'custom'],
       grantTypes: ['authorization_code', 'refresh_token'],
     },

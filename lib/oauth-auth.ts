@@ -22,7 +22,11 @@ export const REFRESH_TOKEN_EXPIRES_IN_DAYS = 30;
 
 // 発行者URL
 export function getIssuer(): string {
-  return process.env.OAUTH_ISSUER || 'http://localhost:3019';
+  const issuer = process.env.OAUTH_ISSUER;
+  if (!issuer) {
+    throw new Error('OAUTH_ISSUER environment variable is required');
+  }
+  return issuer;
 }
 
 // 鍵ID

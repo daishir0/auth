@@ -111,16 +111,28 @@ async function main() {
     console.log(`Scopes: ${existingPolicyManagerClient.scopes.join(', ')}`);
     console.log('※ シークレットは既存のものを使用してください');
   } else {
+    // リダイレクトURIを環境変数から取得（カンマ区切り）
+    const policyManagerRedirectUris = (process.env.SEED_OAUTH_REDIRECT_URIS || '')
+      .split(',')
+      .map(uri => uri.trim())
+      .filter(Boolean);
+
+    // デフォルト値（環境変数が設定されていない場合）
+    const defaultRedirectUris = [
+      'http://localhost:3018/api/auth/callback/auth-provider',
+    ];
+
+    const finalRedirectUris = policyManagerRedirectUris.length > 0
+      ? policyManagerRedirectUris
+      : defaultRedirectUris;
+
     await prisma.oAuthClient.create({
       data: {
         clientId: policyManagerClientId,
         clientSecret: hashClientSecret(policyManagerClientSecret),
         name: 'Policy Manager',
         description: 'ポリシー管理システム（OAuth 2.0 / OIDC認証）',
-        redirectUris: [
-          'https://policy-manager.senku.work/api/auth/callback/senku-auth',
-          'http://localhost:3018/api/auth/callback/senku-auth',
-        ],
+        redirectUris: finalRedirectUris,
         scopes: ['openid', 'profile', 'email', 'custom'],
         grantTypes: ['authorization_code', 'refresh_token'],
         isActive: true,
@@ -131,7 +143,7 @@ async function main() {
     console.log('=== Policy Manager クライアント情報（新規作成） ===');
     console.log(`Client ID: ${policyManagerClientId}`);
     console.log(`Client Secret: ${policyManagerClientSecret}`);
-    console.log(`Redirect URIs: https://policy-manager.senku.work/api/auth/callback/senku-auth, http://localhost:3018/api/auth/callback/senku-auth`);
+    console.log(`Redirect URIs: ${finalRedirectUris.join(', ')}`);
     console.log(`Scopes: openid, profile, email, custom`);
     console.log('');
     console.log('*** このシークレットを policy-manager の .env に設定してください ***');
