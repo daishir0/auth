@@ -135,12 +135,17 @@ async function handleUserInfo(request: NextRequest) {
   };
 
   // プロフィール情報（profile スコープ）
+  const baseUrl = process.env.NEXTAUTH_URL || process.env.AUTH_URL || 'https://auth.senku.work';
+
   if (user.profile) {
     userInfo.name = user.profile.displayName || `${user.profile.firstName || ''} ${user.profile.lastName || ''}`.trim() || user.email.split('@')[0];
     userInfo.given_name = user.profile.firstName;
     userInfo.family_name = user.profile.lastName;
     userInfo.nickname = user.profile.displayName;
-    userInfo.picture = user.profile.avatarUrl;
+    // pictureは絶対URLで返す
+    userInfo.picture = user.profile.avatarUrl
+      ? (user.profile.avatarUrl.startsWith('http') ? user.profile.avatarUrl : `${baseUrl}${user.profile.avatarUrl}`)
+      : `${baseUrl}/avatars/default.png`;
     userInfo.phone_number = user.profile.phone;
 
     // カスタムプロフィールクレーム
@@ -155,6 +160,7 @@ async function handleUserInfo(request: NextRequest) {
     };
   } else {
     userInfo.name = user.email.split('@')[0];
+    userInfo.picture = `${baseUrl}/avatars/default.png`;
   }
 
   // 組織・役職情報（custom スコープ）

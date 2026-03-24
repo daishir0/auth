@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { verifyAccessToken } from '@/lib/auth';
+import { uploadAvatar, deleteAvatar } from '@/lib/services/avatar.service';
 import prisma from '@/lib/db';
 
 async function getAuthenticatedUser(request: NextRequest) {
@@ -21,7 +22,7 @@ async function getAuthenticatedUser(request: NextRequest) {
   return await verifyAccessToken(token);
 }
 
-export async function GET(
+export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -36,45 +37,7 @@ export async function GET(
       );
     }
 
-    // 自分自身のプロフィールか、admin/super_adminのみ取得可能
-    const isAdmin = currentUser.roles.includes('admin') || currentUser.roles.includes('super_admin');
-    if (currentUser.userId !== targetUserId && !isAdmin) {
-      return NextResponse.json(
-        { error: '権限がありません' },
-        { status: 403 }
-      );
-    }
-
-    const profile = await prisma.userProfile.findUnique({
-      where: { userId: targetUserId },
-    });
-
-    return NextResponse.json({ profile });
-  } catch (error) {
-    console.error('Profile get error:', error);
-    return NextResponse.json(
-      { error: 'サーバーエラーが発生しました' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id: targetUserId } = await params;
-    const currentUser = await getAuthenticatedUser(request);
-
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: '認証が必要です' },
-        { status: 401 }
-      );
-    }
-
-    // 自分自身のプロフィールか、admin/super_adminのみ更新可能
+    // 自分自身のアバターか、admin/super_adminのみ変更可能
     const isAdmin = currentUser.roles.includes('admin') || currentUser.roles.includes('super_admin');
     if (currentUser.userId !== targetUserId && !isAdmin) {
       return NextResponse.json(
@@ -95,33 +58,76 @@ export async function PATCH(
       );
     }
 
-    const body = await request.json();
-    const { displayName, firstName, lastName, phone } = body;
+    const formData = await request.formData();
+    const file = formData.get('avatar') as File | null;
 
-    // プロフィールを更新または作成
-    const profile = await prisma.userProfile.upsert({
-      where: { userId: targetUserId },
-      update: {
-        displayName: displayName || null,
-        firstName: firstName || null,
-        lastName: lastName || null,
-        phone: phone || null,
-      },
-      create: {
-        userId: targetUserId,
-        displayName: displayName || null,
-        firstName: firstName || null,
-        lastName: lastName || null,
-        phone: phone || null,
-      },
-    });
+    if (!file) {
+      return NextResponse.json(
+        { error: 'ファイルが選択されていません' },
+        { status: 400 }
+      );
+    }
+
+    const result = await uploadAvatar(targetUserId, file);
+
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.error },
+        { status: 400 }
+      );
+    }
 
     return NextResponse.json({
-      message: 'プロフィールを更新しました',
-      profile,
+      message: 'アバターをアップロードしました',
+      avatarUrl: result.avatarUrl,
     });
   } catch (error) {
-    console.error('Profile update error:', error);
+    console.error('Avatar upload error:', error);
+    return NextResponse.json(
+      { error: 'サーバーエラーが発生しました' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: targetUserId } = await params;
+    const currentUser = await getAuthenticatedUser(request);
+
+    if (!currentUser) {
+      return NextResponse.json(
+        { error: '認証が必要です' },
+        { status: 401 }
+      );
+    }
+
+    // 自分自身のアバターか、admin/super_adminのみ削除可能
+    const isAdmin = currentUser.roles.includes('admin') || currentUser.roles.includes('super_admin');
+    if (currentUser.userId !== targetUserId && !isAdmin) {
+      return NextResponse.json(
+        { error: '権限がありません' },
+        { status: 403 }
+      );
+    }
+
+    const result = await deleteAvatar(targetUserId);
+
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.error },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({
+      message: 'アバターを削除しました',
+    });
+  } catch (error) {
+    console.error('Avatar delete error:', error);
     return NextResponse.json(
       { error: 'サーバーエラーが発生しました' },
       { status: 500 }
