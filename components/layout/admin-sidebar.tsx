@@ -10,6 +10,7 @@ import {
   Briefcase,
   ShieldCheck,
   AppWindow,
+  BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -23,6 +24,11 @@ const mainNavItems = [
     title: 'プロフィール',
     href: '/profile',
     icon: User,
+  },
+  {
+    title: '使い方',
+    href: '/guide',
+    icon: BookOpen,
   },
 ];
 
