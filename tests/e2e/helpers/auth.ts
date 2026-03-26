@@ -1,8 +1,8 @@
 import { Page } from "@playwright/test";
 
 // テスト用ユーザー情報（環境変数から取得 - 必須）
-const ADMIN_EMAIL = process.env.TEST_USER_EMAIL;
-const ADMIN_PASSWORD = process.env.TEST_USER_PASSWORD;
+const ADMIN_EMAIL = process.env.TEST_USER_EMAIL ?? '';
+const ADMIN_PASSWORD = process.env.TEST_USER_PASSWORD ?? '';
 
 if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
   throw new Error('TEST_USER_EMAIL and TEST_USER_PASSWORD environment variables are required');

@@ -100,6 +100,7 @@ export async function GET(
           name: om.organization.name,
           code: om.organization.code,
           isPrimary: om.isPrimary,
+          membershipId: om.id,
           position: om.position
             ? {
                 id: om.position.id,

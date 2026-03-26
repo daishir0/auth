@@ -18,6 +18,7 @@ interface Organization {
   name: string;
   code: string;
   isPrimary: boolean;
+  membershipId?: string;
   position?: {
     id: string;
     name: string;
@@ -35,6 +36,7 @@ interface UserData {
     lastName?: string | null;
     avatarUrl?: string | null;
     phone?: string | null;
+    hireDate?: string | null;
   } | null;
   roles: string[];
   organizations: Organization[];

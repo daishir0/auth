@@ -26,6 +26,15 @@ import {
 import { ApplicationForm } from '@/components/applications/application-form';
 import { ApplicationStats } from '@/components/applications/application-stats';
 import { SecretDisplay } from '@/components/applications/secret-display';
+import { HelpTooltip, BadgeWithTooltip } from '@/components/ui/help-tooltip';
+import {
+  CLIENT_ID_HELP,
+  CLIENT_SECRET_HELP,
+  REGENERATE_SECRET_HELP,
+  ACTIVE_TOKENS_HELP,
+  getScopeHelpText,
+  getGrantTypeHelpText,
+} from '@/lib/constants/oauth-help-texts';
 import { toast } from 'sonner';
 
 interface Application {
@@ -209,13 +218,19 @@ export default function ApplicationDetailPage({ params }: ApplicationDetailPageP
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">Client ID</label>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                    Client ID
+                    <HelpTooltip text={CLIENT_ID_HELP} />
+                  </label>
                   <code className="block bg-muted px-3 py-2 rounded text-sm font-mono break-all">
                     {application.clientId}
                   </code>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">Client Secret</label>
+                  <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                    Client Secret
+                    <HelpTooltip text={CLIENT_SECRET_HELP} />
+                  </label>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 bg-muted px-3 py-2 rounded text-sm font-mono">
                       ••••••••••••••••
@@ -267,9 +282,11 @@ export default function ApplicationDetailPage({ params }: ApplicationDetailPageP
               <CardContent>
                 <div className="flex flex-wrap gap-2">
                   {application.scopes.map((scope) => (
-                    <Badge key={scope} variant="outline">
-                      {scope}
-                    </Badge>
+                    <BadgeWithTooltip key={scope} tooltip={getScopeHelpText(scope)}>
+                      <Badge variant="outline">
+                        {scope}
+                      </Badge>
+                    </BadgeWithTooltip>
                   ))}
                 </div>
               </CardContent>
@@ -282,9 +299,11 @@ export default function ApplicationDetailPage({ params }: ApplicationDetailPageP
               <CardContent>
                 <div className="flex flex-wrap gap-2">
                   {application.grantTypes.map((grantType) => (
-                    <Badge key={grantType} variant="outline">
-                      {grantType}
-                    </Badge>
+                    <BadgeWithTooltip key={grantType} tooltip={getGrantTypeHelpText(grantType)}>
+                      <Badge variant="outline">
+                        {grantType}
+                      </Badge>
+                    </BadgeWithTooltip>
                   ))}
                 </div>
               </CardContent>
@@ -323,7 +342,10 @@ export default function ApplicationDetailPage({ params }: ApplicationDetailPageP
         <TabsContent value="security" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>シークレット再生成</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                シークレット再生成
+                <HelpTooltip text={REGENERATE_SECRET_HELP} />
+              </CardTitle>
               <CardDescription>
                 クライアントシークレットを新しい値に更新します。
                 古いシークレットは即座に無効化されます。
@@ -354,6 +376,9 @@ export default function ApplicationDetailPage({ params }: ApplicationDetailPageP
                   <p className="text-sm">
                     現在のアクティブトークン数:{' '}
                     <span className="font-medium">{application.activeTokens}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {ACTIVE_TOKENS_HELP}
                   </p>
                 </div>
                 <Button

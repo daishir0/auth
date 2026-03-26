@@ -9,6 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { HelpTooltip } from '@/components/ui/help-tooltip';
+import { IS_ACTIVE_HELP } from '@/lib/constants/oauth-help-texts';
 
 const AVAILABLE_SCOPES = [
   { value: 'openid', label: 'OpenID', description: 'ユーザーの一意識別子' },
@@ -205,7 +207,10 @@ export function ApplicationForm({ initialData, onSuccess }: ApplicationFormProps
           {isEditing && (
             <div className="flex items-center justify-between pt-2">
               <div className="space-y-0.5">
-                <Label>有効/無効</Label>
+                <Label className="flex items-center gap-1">
+                  有効/無効
+                  <HelpTooltip text={IS_ACTIVE_HELP} />
+                </Label>
                 <p className="text-sm text-muted-foreground">
                   無効化すると新規トークン発行ができなくなります
                 </p>

@@ -14,12 +14,14 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { AvatarUpload } from '@/components/profile/avatar-upload';
+import { OrganizationMembershipEditor } from '@/components/users/organization-membership-editor';
 
 const userSchema = z.object({
   displayName: z.string().max(100).optional().or(z.literal('')),
   firstName: z.string().max(50).optional().or(z.literal('')),
   lastName: z.string().max(50).optional().or(z.literal('')),
   phone: z.string().max(20).optional().or(z.literal('')),
+  hireDate: z.string().optional().or(z.literal('')),
   isActive: z.boolean(),
 });
 
@@ -36,6 +38,7 @@ interface Organization {
   name: string;
   code: string;
   isPrimary: boolean;
+  membershipId?: string;
   position?: {
     id: string;
     name: string;
@@ -54,6 +57,7 @@ interface UserFormProps {
       lastName?: string | null;
       avatarUrl?: string | null;
       phone?: string | null;
+      hireDate?: string | null;
     } | null;
     roles: string[];
     organizations: Organization[];
@@ -68,6 +72,13 @@ export function UserForm({ user, allRoles, onUpdate }: UserFormProps) {
   const [userRoles, setUserRoles] = useState<string[]>(user.roles);
   const [togglingRole, setTogglingRole] = useState<string | null>(null);
 
+  // hireDateをYYYY-MM-DD形式に変換
+  const formatDateForInput = (dateString: string | null | undefined): string => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toISOString().split('T')[0];
+  };
+
   const {
     register,
     handleSubmit,
@@ -81,6 +92,7 @@ export function UserForm({ user, allRoles, onUpdate }: UserFormProps) {
       firstName: user.profile?.firstName || '',
       lastName: user.profile?.lastName || '',
       phone: user.profile?.phone || '',
+      hireDate: formatDateForInput(user.profile?.hireDate),
       isActive: user.isActive,
     },
   });
@@ -99,6 +111,7 @@ export function UserForm({ user, allRoles, onUpdate }: UserFormProps) {
           firstName: data.firstName,
           lastName: data.lastName,
           phone: data.phone,
+          hireDate: data.hireDate || null,
         }),
       });
 
@@ -211,6 +224,11 @@ export function UserForm({ user, allRoles, onUpdate }: UserFormProps) {
               <Input id="phone" {...register('phone')} />
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="hireDate">入社年月日</Label>
+              <Input id="hireDate" type="date" {...register('hireDate')} />
+            </div>
+
             <Separator />
 
             <div className="flex items-center justify-between">
@@ -277,29 +295,23 @@ export function UserForm({ user, allRoles, onUpdate }: UserFormProps) {
       <Card>
         <CardHeader>
           <CardTitle>所属組織</CardTitle>
-          <CardDescription>ユーザーが所属している組織</CardDescription>
+          <CardDescription>ユーザーが所属している組織を管理します</CardDescription>
         </CardHeader>
         <CardContent>
-          {user.organizations.length === 0 ? (
-            <p className="text-muted-foreground">所属組織がありません</p>
-          ) : (
-            <div className="space-y-2">
-              {user.organizations.map((org) => (
-                <div
-                  key={org.id}
-                  className="flex items-center justify-between p-3 rounded-lg border"
-                >
-                  <div>
-                    <div className="font-medium">{org.name}</div>
-                    {org.position && (
-                      <div className="text-sm text-muted-foreground">{org.position.name}</div>
-                    )}
-                  </div>
-                  {org.isPrimary && <Badge>主所属</Badge>}
-                </div>
-              ))}
-            </div>
-          )}
+          <OrganizationMembershipEditor
+            userId={user.id}
+            memberships={user.organizations.map((org) => ({
+              membershipId: org.membershipId || org.id,
+              organization: {
+                id: org.id,
+                name: org.name,
+                code: org.code,
+              },
+              position: org.position || null,
+              isPrimary: org.isPrimary,
+            }))}
+            onUpdate={onUpdate}
+          />
         </CardContent>
       </Card>
     </div>

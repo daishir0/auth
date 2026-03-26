@@ -96,7 +96,10 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { displayName, firstName, lastName, phone } = body;
+    const { displayName, firstName, lastName, phone, hireDate } = body;
+
+    // hireDateを日付型に変換（空文字やnullの場合はnull）
+    const parsedHireDate = hireDate ? new Date(hireDate) : null;
 
     // プロフィールを更新または作成
     const profile = await prisma.userProfile.upsert({
@@ -106,6 +109,7 @@ export async function PATCH(
         firstName: firstName || null,
         lastName: lastName || null,
         phone: phone || null,
+        hireDate: parsedHireDate,
       },
       create: {
         userId: targetUserId,
@@ -113,6 +117,7 @@ export async function PATCH(
         firstName: firstName || null,
         lastName: lastName || null,
         phone: phone || null,
+        hireDate: parsedHireDate,
       },
     });
 
