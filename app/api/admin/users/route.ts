@@ -79,12 +79,16 @@ export async function GET(request: NextRequest) {
               position: true,
             },
             where: {
-              isPrimary: true,
               OR: [
                 { endDate: null },
                 { endDate: { gt: new Date() } },
               ],
             },
+            orderBy: [
+              { isPrimary: 'desc' },
+              { startDate: 'desc' },
+            ],
+            take: 1,
           },
         },
         orderBy: { createdAt: 'desc' },

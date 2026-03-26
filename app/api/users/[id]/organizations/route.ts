@@ -195,6 +195,91 @@ export async function POST(
   }
 }
 
+// PATCH /api/users/:id/organizations - 主所属変更
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const authResult = await authenticateRequest(request);
+    if ('error' in authResult) return authResult.error;
+
+    const { id } = await params;
+
+    // users:write権限が必要
+    if (!hasPermission(authResult.user, 'users:write')) {
+      return forbiddenResponse();
+    }
+
+    const body = await request.json();
+    const { membershipId } = body;
+
+    if (!membershipId) {
+      return NextResponse.json(
+        { error: 'membershipIdは必須です' },
+        { status: 400 }
+      );
+    }
+
+    // 指定された所属の存在確認
+    const membership = await prisma.organizationMembership.findFirst({
+      where: {
+        id: membershipId,
+        userId: id,
+      },
+      include: {
+        organization: true,
+      },
+    });
+
+    if (!membership) {
+      return NextResponse.json(
+        { error: '指定された所属が見つかりません' },
+        { status: 404 }
+      );
+    }
+
+    // すでに主所属の場合はスキップ
+    if (membership.isPrimary) {
+      return NextResponse.json({
+        message: '既に主所属です',
+      });
+    }
+
+    // トランザクションで主所属を更新
+    await prisma.$transaction([
+      // 他の所属の主所属フラグを解除
+      prisma.organizationMembership.updateMany({
+        where: {
+          userId: id,
+          isPrimary: true,
+        },
+        data: {
+          isPrimary: false,
+        },
+      }),
+      // 指定した所属を主所属に設定
+      prisma.organizationMembership.update({
+        where: { id: membershipId },
+        data: {
+          isPrimary: true,
+        },
+      }),
+    ]);
+
+    return NextResponse.json({
+      message: '主所属を変更しました',
+      organizationName: membership.organization.name,
+    });
+  } catch (error) {
+    console.error('Update primary organization error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE /api/users/:id/organizations - 所属組織削除
 export async function DELETE(
   request: NextRequest,

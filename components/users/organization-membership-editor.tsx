@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Loader2, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -58,6 +58,7 @@ export function OrganizationMembershipEditor({
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [settingPrimaryId, setSettingPrimaryId] = useState<string | null>(null);
 
   // 新規追加フォームの状態
   const [selectedOrganization, setSelectedOrganization] = useState<string>('');
@@ -151,6 +152,30 @@ export function OrganizationMembershipEditor({
     }
   };
 
+  // 主所属設定
+  const handleSetPrimary = async (membershipId: string) => {
+    setSettingPrimaryId(membershipId);
+    try {
+      const response = await fetch(`/api/users/${userId}/organizations`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ membershipId }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || '主所属の変更に失敗しました');
+      }
+
+      toast.success('主所属を変更しました');
+      onUpdate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '主所属の変更に失敗しました');
+    } finally {
+      setSettingPrimaryId(null);
+    }
+  };
+
   // 既に所属している組織をフィルタリング
   const availableOrganizations = organizations.filter(
     (org) => !memberships.some((m) => m.organization.id === org.id)
@@ -185,7 +210,26 @@ export function OrganizationMembershipEditor({
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {membership.isPrimary && <Badge>主所属</Badge>}
+                {membership.isPrimary ? (
+                  <Badge variant="default" className="flex items-center gap-1">
+                    <Star className="h-3 w-3" />
+                    主所属
+                  </Badge>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleSetPrimary(membership.membershipId)}
+                    disabled={settingPrimaryId === membership.membershipId}
+                  >
+                    {settingPrimaryId === membership.membershipId ? (
+                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                    ) : (
+                      <Star className="h-3 w-3 mr-1" />
+                    )}
+                    主所属に設定
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
