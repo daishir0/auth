@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   AppWindow,
   BookOpen,
+  Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -52,6 +53,11 @@ const adminNavItems = [
     title: 'アプリケーション',
     href: '/applications',
     icon: AppWindow,
+  },
+  {
+    title: 'システム設定',
+    href: '/settings',
+    icon: Settings,
   },
 ];
 

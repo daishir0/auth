@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton';
 
 interface AuthFormProps {
   mode: 'login' | 'register';
@@ -50,6 +51,15 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleSsoEnabled, setGoogleSsoEnabled] = useState(false);
+
+  useEffect(() => {
+    // Google SSOの状態を取得
+    fetch('/api/auth/google/status')
+      .then((res) => res.json())
+      .then((data) => setGoogleSsoEnabled(data.enabled))
+      .catch(() => setGoogleSsoEnabled(false));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,6 +114,23 @@ export default function AuthForm({ mode }: AuthFormProps) {
             {mode === 'login' ? 'Sign in to your account' : 'Create a new account'}
           </h2>
         </div>
+
+        {googleSsoEnabled && (
+          <div className="space-y-4">
+            <GoogleLoginButton
+              redirectUrl={redirectUrl || undefined}
+              disabled={loading}
+            />
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">または</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (

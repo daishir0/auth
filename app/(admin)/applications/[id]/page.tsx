@@ -26,6 +26,7 @@ import {
 import { ApplicationForm } from '@/components/applications/application-form';
 import { ApplicationStats } from '@/components/applications/application-stats';
 import { SecretDisplay } from '@/components/applications/secret-display';
+import { AccessManagement } from '@/components/applications/access-management';
 import { HelpTooltip, BadgeWithTooltip } from '@/components/ui/help-tooltip';
 import {
   CLIENT_ID_HELP,
@@ -205,6 +206,7 @@ export default function ApplicationDetailPage({ params }: ApplicationDetailPageP
           <TabsTrigger value="info">基本情報</TabsTrigger>
           <TabsTrigger value="settings">設定変更</TabsTrigger>
           <TabsTrigger value="security">セキュリティ</TabsTrigger>
+          <TabsTrigger value="access">アクセス管理</TabsTrigger>
         </TabsList>
 
         <TabsContent value="info" className="space-y-4">
@@ -392,6 +394,10 @@ export default function ApplicationDetailPage({ params }: ApplicationDetailPageP
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="access">
+          <AccessManagement applicationId={application.id} />
         </TabsContent>
       </Tabs>
 

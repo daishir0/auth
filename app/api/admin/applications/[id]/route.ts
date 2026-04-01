@@ -55,6 +55,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         clientId: true,
         name: true,
         description: true,
+        appUrl: true,
         redirectUris: true,
         scopes: true,
         grantTypes: true,
@@ -86,6 +87,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       clientId: application.clientId,
       name: application.name,
       description: application.description,
+      appUrl: application.appUrl,
       redirectUris: application.redirectUris,
       scopes: application.scopes,
       grantTypes: application.grantTypes,
@@ -126,7 +128,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const { id } = await params;
     const body = await request.json();
-    const { name, description, redirectUris, scopes, grantTypes, isActive } = body;
+    const { name, description, appUrl, redirectUris, scopes, grantTypes, isActive } = body;
 
     // アプリケーションの存在確認
     const existing = await prisma.oAuthClient.findUnique({
@@ -172,6 +174,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const updateData: {
       name?: string;
       description?: string | null;
+      appUrl?: string | null;
       redirectUris?: string[];
       scopes?: string[];
       grantTypes?: string[];
@@ -180,6 +183,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     if (name !== undefined) updateData.name = name.trim();
     if (description !== undefined) updateData.description = description?.trim() || null;
+    if (appUrl !== undefined) updateData.appUrl = appUrl?.trim() || null;
     if (redirectUris !== undefined) updateData.redirectUris = redirectUris;
     if (scopes !== undefined) updateData.scopes = scopes;
     if (grantTypes !== undefined) updateData.grantTypes = grantTypes;
@@ -207,6 +211,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       clientId: application.clientId,
       name: application.name,
       description: application.description,
+      appUrl: application.appUrl,
       redirectUris: application.redirectUris,
       scopes: application.scopes,
       grantTypes: application.grantTypes,

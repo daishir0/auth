@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { UserForm } from '@/components/users/user-form';
+import { ApplicationAccessEditor } from '@/components/users/application-access-editor';
 
 interface Role {
   id: string;
@@ -132,6 +133,8 @@ export default function UserDetailPage() {
       </div>
 
       <UserForm user={user} allRoles={allRoles} onUpdate={fetchUser} />
+
+      <ApplicationAccessEditor userId={userId} onUpdate={fetchUser} />
     </div>
   );
 }

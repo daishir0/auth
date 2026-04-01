@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
           clientId: true,
           name: true,
           description: true,
+          appUrl: true,
           redirectUris: true,
           scopes: true,
           grantTypes: true,
@@ -117,6 +118,7 @@ export async function GET(request: NextRequest) {
         clientId: app.clientId,
         name: app.name,
         description: app.description,
+        appUrl: app.appUrl,
         redirectUris: app.redirectUris,
         scopes: app.scopes,
         grantTypes: app.grantTypes,
@@ -164,7 +166,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, description, redirectUris, scopes, grantTypes } = body;
+    const { name, description, appUrl, redirectUris, scopes, grantTypes } = body;
 
     // バリデーション
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -208,6 +210,7 @@ export async function POST(request: NextRequest) {
         clientSecret: hashedSecret,
         name: name.trim(),
         description: description?.trim() || null,
+        appUrl: appUrl?.trim() || null,
         redirectUris,
         scopes: scopes && Array.isArray(scopes) ? scopes : defaultScopes,
         grantTypes: grantTypes && Array.isArray(grantTypes) ? grantTypes : defaultGrantTypes,
@@ -233,6 +236,7 @@ export async function POST(request: NextRequest) {
       clientSecret, // 作成時のみ平文で返却
       name: application.name,
       description: application.description,
+      appUrl: application.appUrl,
       redirectUris: application.redirectUris,
       scopes: application.scopes,
       grantTypes: application.grantTypes,

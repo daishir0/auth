@@ -157,6 +157,25 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(loginUrl.toString());
   }
 
+  // ユーザー×アプリケーション アクセス権チェック
+  const hasAccess = await prisma.userApplicationAccess.findUnique({
+    where: {
+      userId_applicationId: {
+        userId: user.userId,
+        applicationId: client.id,
+      },
+    },
+  });
+
+  if (!hasAccess) {
+    // アクセス権がない場合、エラーページにリダイレクト
+    // セキュリティのため redirect_uri にはリダイレクトしない
+    const baseUrl = getBaseUrl(request);
+    return NextResponse.redirect(
+      new URL(`/oauth/error?error=access_denied&app=${encodeURIComponent(client.name)}`, baseUrl)
+    );
+  }
+
   // 認可コードを生成
   const code = generateAuthorizationCode();
   const expiresAt = getAuthCodeExpiry();

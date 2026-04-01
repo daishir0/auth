@@ -27,6 +27,7 @@ model User {
   organizationMemberships OrganizationMembership[]
   globalRoles          UserGlobalRole[]
   idMappings           UserIdMapping[]
+  applicationAccess    UserApplicationAccess[]
 }
 
 // 認証情報（パスワード等を分離）
@@ -34,7 +35,8 @@ model UserCredential {
   id                  String    @id @default(uuid()) @db.Uuid
   userId              String    @unique @db.Uuid
   user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  hashedPassword      String
+  hashedPassword      String?   // NULL許可（Google SSO専用ユーザー用）
+  googleId            String?   @unique  // Google OAuth sub claim
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime?
   mfaEnabled          Boolean   @default(false)
@@ -227,6 +229,10 @@ model OAuthClient {
 
   authorizationCodes AuthorizationCode[]
   refreshTokens      RefreshToken[]
+  userAccess         UserApplicationAccess[]
+
+  appUrl             String?   // アプリのトップURL（ダッシュボードからのリンク用）
+  iconUrl            String?   // アプリのアイコンURL（オプション）
 }
 
 // 認可コード（Authorization Code Flow）
@@ -295,4 +301,41 @@ model RateLimitEntry {
 
   @@index([key])
   @@index([resetAt])
+}
+
+// ========================================
+// ユーザー×アプリケーション アクセス制御
+// ========================================
+
+model UserApplicationAccess {
+  id              String      @id @default(uuid()) @db.Uuid
+  userId          String      @db.Uuid
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applicationId   String      @db.Uuid
+  application     OAuthClient @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  grantedAt       DateTime    @default(now())
+  grantedBy       String?     @db.Uuid  // 付与した管理者のID
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([userId, applicationId])
+  @@index([userId])
+  @@index([applicationId])
+}
+
+// ========================================
+// システム設定
+// ========================================
+
+model SystemSetting {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique
+  value     String
+  encrypted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
 }

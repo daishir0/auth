@@ -48,6 +48,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // パスワード未設定ユーザーのハンドリング（Google SSO専用）
+    if (!user.credential.hashedPassword) {
+      return NextResponse.json(
+        { error: 'このアカウントはGoogleログインのみ対応しています' },
+        { status: 400 }
+      );
+    }
+
     // アカウントがアクティブか確認
     if (!user.isActive) {
       return NextResponse.json(

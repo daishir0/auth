@@ -34,6 +34,7 @@ interface ApplicationFormProps {
     scopes: string[];
     grantTypes: string[];
     isActive: boolean;
+    appUrl?: string | null;
   };
   onSuccess?: (data: {
     id: string;
@@ -49,6 +50,7 @@ export function ApplicationForm({ initialData, onSuccess }: ApplicationFormProps
 
   const [name, setName] = useState(initialData?.name || '');
   const [description, setDescription] = useState(initialData?.description || '');
+  const [appUrl, setAppUrl] = useState(initialData?.appUrl || '');
   const [redirectUris, setRedirectUris] = useState<string[]>(
     initialData?.redirectUris || ['']
   );
@@ -136,6 +138,7 @@ export function ApplicationForm({ initialData, onSuccess }: ApplicationFormProps
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim() || null,
+          appUrl: appUrl.trim() || null,
           redirectUris: validUris,
           scopes,
           grantTypes,
@@ -202,6 +205,20 @@ export function ApplicationForm({ initialData, onSuccess }: ApplicationFormProps
               placeholder="アプリケーションの説明を入力..."
               rows={3}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="appUrl">アプリケーションURL</Label>
+            <Input
+              id="appUrl"
+              type="url"
+              value={appUrl}
+              onChange={(e) => setAppUrl(e.target.value)}
+              placeholder="https://example.com"
+            />
+            <p className="text-xs text-muted-foreground">
+              ダッシュボードからアプリを開く際のリンク先URL
+            </p>
           </div>
 
           {isEditing && (
