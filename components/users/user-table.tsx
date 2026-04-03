@@ -22,6 +22,7 @@ interface User {
   email: string;
   isActive: boolean;
   createdAt: string;
+  lastLoginAt?: string | null;
   profile: {
     displayName?: string | null;
     firstName?: string | null;
@@ -34,6 +35,10 @@ interface User {
     name: string;
     position?: string | null;
   } | null;
+  authMethods?: {
+    hasPassword: boolean;
+    hasGoogle: boolean;
+  };
 }
 
 interface Pagination {
@@ -121,7 +126,9 @@ export function UserTable({
               <TableHead>ユーザー</TableHead>
               <TableHead>ロール</TableHead>
               <TableHead>所属</TableHead>
+              <TableHead>ログイン方法</TableHead>
               <TableHead>ステータス</TableHead>
+              <TableHead>最終ログイン</TableHead>
               <TableHead>登録日</TableHead>
               <TableHead className="w-[80px]"></TableHead>
             </TableRow>
@@ -129,7 +136,7 @@ export function UserTable({
           <TableBody>
             {users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                   ユーザーが見つかりません
                 </TableCell>
               </TableRow>
@@ -172,9 +179,33 @@ export function UserTable({
                     )}
                   </TableCell>
                   <TableCell>
+                    <div className="flex gap-1 flex-wrap">
+                      {user.authMethods?.hasPassword && (
+                        <Badge variant="outline">メール</Badge>
+                      )}
+                      {user.authMethods?.hasGoogle && (
+                        <Badge variant="outline">Google</Badge>
+                      )}
+                      {!user.authMethods?.hasPassword && !user.authMethods?.hasGoogle && (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
                     <Badge variant={user.isActive ? 'default' : 'secondary'}>
                       {user.isActive ? 'アクティブ' : '無効'}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {user.lastLoginAt
+                      ? new Date(user.lastLoginAt).toLocaleDateString('ja-JP', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : '-'}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {new Date(user.createdAt).toLocaleDateString('ja-JP')}

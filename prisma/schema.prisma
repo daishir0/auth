@@ -12,12 +12,14 @@ datasource db {
 // ========================================
 
 model User {
-  id        String   @id @default(uuid()) @db.Uuid
-  email     String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  deletedAt DateTime? // 論理削除
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @unique
+  emailVerified Boolean   @default(false) // メール確認済みフラグ
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime? // 最終ログイン日時
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime? // 論理削除
 
   // リレーション
   credential           UserCredential?
@@ -338,4 +340,25 @@ model SystemSetting {
   updatedAt DateTime @updatedAt
 
   @@index([key])
+}
+
+// ========================================
+// メール確認トークン
+// ========================================
+
+model EmailVerificationToken {
+  id             String   @id @default(uuid()) @db.Uuid
+  email          String
+  token          String   @unique
+  type           String   // 'register' | 'add_password'
+  // register時の情報を保持
+  hashedPassword String?
+  displayName    String?
+  firstName      String?
+  lastName       String?
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([email])
+  @@index([token])
 }

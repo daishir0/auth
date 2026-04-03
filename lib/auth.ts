@@ -1,14 +1,13 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { randomBytes } from 'crypto';
+import { getTokenSettings, TOKEN_DEFAULTS } from '@/lib/settings';
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'fallback-secret-do-not-use-in-production'
 );
 
-// アクセストークン有効期限: 15分
-const ACCESS_TOKEN_EXPIRES_IN = '15m';
-// リフレッシュトークン有効期限: 30日
-export const REFRESH_TOKEN_EXPIRES_IN_DAYS = 30;
+// デフォルト値（設定が取得できない場合のフォールバック）
+export const REFRESH_TOKEN_EXPIRES_IN_DAYS = TOKEN_DEFAULTS.REFRESH_TOKEN_EXPIRES_DAYS;
 
 export interface TokenPayload {
   userId: string;
@@ -17,13 +16,30 @@ export interface TokenPayload {
 }
 
 /**
+ * アクセストークン有効期限（分）を取得
+ */
+export async function getAccessTokenExpiryMinutes(): Promise<number> {
+  const settings = await getTokenSettings();
+  return settings.accessTokenExpiresMinutes;
+}
+
+/**
+ * リフレッシュトークン有効期限（日）を取得
+ */
+export async function getRefreshTokenExpiryDays(): Promise<number> {
+  const settings = await getTokenSettings();
+  return settings.refreshTokenExpiresDays;
+}
+
+/**
  * アクセストークン（JWT）を生成
  */
 export async function generateAccessToken(payload: TokenPayload): Promise<string> {
+  const expiryMinutes = await getAccessTokenExpiryMinutes();
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime(ACCESS_TOKEN_EXPIRES_IN)
+    .setExpirationTime(`${expiryMinutes}m`)
     .sign(JWT_SECRET);
 }
 
@@ -51,10 +67,11 @@ export function generateRefreshToken(): string {
 }
 
 /**
- * リフレッシュトークンの有効期限を計算
+ * リフレッシュトークンの有効期限を計算（設定から取得）
  */
-export function getRefreshTokenExpiry(): Date {
+export async function getRefreshTokenExpiry(): Promise<Date> {
+  const days = await getRefreshTokenExpiryDays();
   const expiry = new Date();
-  expiry.setDate(expiry.getDate() + REFRESH_TOKEN_EXPIRES_IN_DAYS);
+  expiry.setDate(expiry.getDate() + days);
   return expiry;
 }

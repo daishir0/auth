@@ -6,8 +6,10 @@ import {
   generateAccessToken,
   generateRefreshToken,
   getRefreshTokenExpiry,
-  REFRESH_TOKEN_EXPIRES_IN_DAYS,
+  getRefreshTokenExpiryDays,
+  getAccessTokenExpiryMinutes,
 } from '@/lib/auth';
+import { cleanupExpiredTokens } from '@/lib/token-cleanup';
 
 export async function POST(request: NextRequest) {
   try {
@@ -94,14 +96,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ログイン成功、失敗カウントをリセット
-    await prisma.userCredential.update({
-      where: { userId: user.id },
-      data: {
-        failedLoginAttempts: 0,
-        lockedUntil: null,
-      },
-    });
+    // メール確認チェック
+    if (!user.emailVerified) {
+      return NextResponse.json(
+        { error: 'メールアドレスの確認が完了していません。確認メールのリンクをクリックしてください。' },
+        { status: 401 }
+      );
+    }
+
+    // ログイン成功、失敗カウントをリセット & 最終ログイン日時を更新
+    await Promise.all([
+      prisma.userCredential.update({
+        where: { userId: user.id },
+        data: {
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        },
+      }),
+      prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      }),
+    ]);
 
     // ロール名配列を取得
     const roles = user.globalRoles.map(ur => ur.role.name);
@@ -114,7 +130,11 @@ export async function POST(request: NextRequest) {
     });
 
     const refreshToken = generateRefreshToken();
-    const refreshTokenExpiry = getRefreshTokenExpiry();
+    const [refreshTokenExpiry, accessTokenExpiryMinutes, refreshTokenExpiryDays] = await Promise.all([
+      getRefreshTokenExpiry(),
+      getAccessTokenExpiryMinutes(),
+      getRefreshTokenExpiryDays(),
+    ]);
 
     // リフレッシュトークンをDBに保存
     await prisma.refreshToken.create({
@@ -135,6 +155,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // 期限切れトークンのクリーンアップ（バックグラウンドで実行、レスポンスをブロックしない）
+    cleanupExpiredTokens().catch(console.error);
+
     // Cookieに設定
     const cookieStore = await cookies();
 
@@ -142,7 +165,7 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 15 * 60, // 15分
+      maxAge: accessTokenExpiryMinutes * 60,
       path: '/',
     });
 
@@ -150,7 +173,7 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: REFRESH_TOKEN_EXPIRES_IN_DAYS * 24 * 60 * 60, // 30日
+      maxAge: refreshTokenExpiryDays * 24 * 60 * 60,
       path: '/',
     });
 

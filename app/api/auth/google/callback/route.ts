@@ -5,7 +5,8 @@ import {
   generateAccessToken,
   generateRefreshToken,
   getRefreshTokenExpiry,
-  REFRESH_TOKEN_EXPIRES_IN_DAYS,
+  getRefreshTokenExpiryDays,
+  getAccessTokenExpiryMinutes,
 } from '@/lib/auth';
 import {
   exchangeCodeForTokens,
@@ -13,6 +14,7 @@ import {
   getGoogleRedirectUri,
 } from '@/lib/google-oauth';
 import { isGoogleSsoEnabled } from '@/lib/settings';
+import { cleanupExpiredTokens } from '@/lib/token-cleanup';
 
 /**
  * リダイレクトURLの安全性を検証（オープンリダイレクト対策）
@@ -130,28 +132,26 @@ export async function GET(request: NextRequest) {
         });
       }
 
+      // GoogleでログインしたユーザーはemailVerifiedをtrueに設定
+      if (!user.emailVerified) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { emailVerified: true },
+        });
+      }
+
       // アカウントがアクティブか確認
       if (!user.isActive) {
         return redirectToError('アカウントが無効化されています');
       }
 
-      // プロフィール更新（アバターURLがなければGoogle画像を設定）
-      if (!user.profile?.avatarUrl && googleUser.picture) {
-        await prisma.userProfile.upsert({
-          where: { userId: user.id },
-          update: { avatarUrl: googleUser.picture },
-          create: {
-            userId: user.id,
-            avatarUrl: googleUser.picture,
-            displayName: googleUser.name || null,
-          },
-        });
-      }
+      // Note: アバターURLはGoogle SSOで上書きしない（ユーザー設定を尊重）
     } else {
       // 新規ユーザー作成
       user = await prisma.user.create({
         data: {
           email: googleUser.email,
+          emailVerified: true, // Googleはメールアドレスをverifyしているためtrue
           isActive: true,
           credential: {
             create: {
@@ -164,7 +164,7 @@ export async function GET(request: NextRequest) {
               displayName: googleUser.name || null,
               firstName: googleUser.given_name || null,
               lastName: googleUser.family_name || null,
-              avatarUrl: googleUser.picture || null,
+              // avatarUrl は設定しない（ユーザーが自分で設定）
             },
           },
         },
@@ -189,7 +189,11 @@ export async function GET(request: NextRequest) {
     });
 
     const refreshToken = generateRefreshToken();
-    const refreshTokenExpiry = getRefreshTokenExpiry();
+    const [refreshTokenExpiry, accessTokenExpiryMinutes, refreshTokenExpiryDays] = await Promise.all([
+      getRefreshTokenExpiry(),
+      getAccessTokenExpiryMinutes(),
+      getRefreshTokenExpiryDays(),
+    ]);
 
     // リフレッシュトークンをDBに保存
     await prisma.refreshToken.create({
@@ -200,25 +204,34 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // セキュリティログ
-    await prisma.securityLog.create({
-      data: {
-        userId: user.id,
-        action: 'login_success_google',
-        ipAddress:
-          request.headers.get('x-forwarded-for') ||
-          request.headers.get('x-real-ip'),
-        userAgent: request.headers.get('user-agent'),
-        details: { provider: 'google' },
-      },
-    });
+    // セキュリティログ & 最終ログイン日時を更新
+    await Promise.all([
+      prisma.securityLog.create({
+        data: {
+          userId: user.id,
+          action: 'login_success_google',
+          ipAddress:
+            request.headers.get('x-forwarded-for') ||
+            request.headers.get('x-real-ip'),
+          userAgent: request.headers.get('user-agent'),
+          details: { provider: 'google' },
+        },
+      }),
+      prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      }),
+    ]);
+
+    // 期限切れトークンのクリーンアップ（バックグラウンドで実行、レスポンスをブロックしない）
+    cleanupExpiredTokens().catch(console.error);
 
     // Cookieに設定
     cookieStore.set('access_token', accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 15 * 60, // 15分
+      maxAge: accessTokenExpiryMinutes * 60,
       path: '/',
     });
 
@@ -226,7 +239,7 @@ export async function GET(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: REFRESH_TOKEN_EXPIRES_IN_DAYS * 24 * 60 * 60, // 30日
+      maxAge: refreshTokenExpiryDays * 24 * 60 * 60,
       path: '/',
     });
 

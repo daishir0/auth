@@ -5,7 +5,8 @@ import {
   generateAccessToken,
   generateRefreshToken,
   getRefreshTokenExpiry,
-  REFRESH_TOKEN_EXPIRES_IN_DAYS,
+  getRefreshTokenExpiryDays,
+  getAccessTokenExpiryMinutes,
 } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
@@ -93,7 +94,11 @@ export async function POST(request: NextRequest) {
     });
 
     const newRefreshToken = generateRefreshToken();
-    const newRefreshTokenExpiry = getRefreshTokenExpiry();
+    const [newRefreshTokenExpiry, accessTokenExpiryMinutes, refreshTokenExpiryDays] = await Promise.all([
+      getRefreshTokenExpiry(),
+      getAccessTokenExpiryMinutes(),
+      getRefreshTokenExpiryDays(),
+    ]);
 
     // 古いリフレッシュトークンを削除し、新しいものを保存
     await prisma.$transaction([
@@ -126,7 +131,7 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 15 * 60,
+      maxAge: accessTokenExpiryMinutes * 60,
       path: '/',
     });
 
@@ -134,7 +139,7 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: REFRESH_TOKEN_EXPIRES_IN_DAYS * 24 * 60 * 60,
+      maxAge: refreshTokenExpiryDays * 24 * 60 * 60,
       path: '/',
     });
 

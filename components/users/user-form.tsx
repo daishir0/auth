@@ -51,6 +51,7 @@ interface UserFormProps {
     email: string;
     isActive: boolean;
     createdAt: string;
+    lastLoginAt?: string | null;
     profile?: {
       displayName?: string | null;
       firstName?: string | null;
@@ -198,6 +199,33 @@ export function UserForm({ user, allRoles, onUpdate }: UserFormProps) {
             <div className="space-y-2">
               <Label htmlFor="email">メールアドレス</Label>
               <Input id="email" value={user.email} disabled className="bg-muted" />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>登録日</Label>
+                <div className="text-sm text-muted-foreground py-2">
+                  {new Date(user.createdAt).toLocaleDateString('ja-JP', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>最終ログイン</Label>
+                <div className="text-sm text-muted-foreground py-2">
+                  {user.lastLoginAt
+                    ? new Date(user.lastLoginAt).toLocaleDateString('ja-JP', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : 'ログインなし'}
+                </div>
+              </div>
             </div>
 
             <div className="space-y-2">

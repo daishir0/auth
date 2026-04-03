@@ -2,10 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Mail } from 'lucide-react';
 import { GoogleLoginButton } from '@/components/auth/GoogleLoginButton';
 
 interface AuthFormProps {
   mode: 'login' | 'register';
+}
+
+interface RegistrationSuccess {
+  success: boolean;
+  message: string;
+  type: 'register' | 'add_password';
 }
 
 /**
@@ -52,6 +59,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleSsoEnabled, setGoogleSsoEnabled] = useState(false);
+  const [registrationSuccess, setRegistrationSuccess] = useState<RegistrationSuccess | null>(null);
 
   useEffect(() => {
     // Google SSOの状態を取得
@@ -84,11 +92,12 @@ export default function AuthForm({ mode }: AuthFormProps) {
       }
 
       if (mode === 'register') {
-        // 登録成功後、ログイン画面へ（redirectがあれば引き継ぐ）
-        const loginUrl = isValidRedirectUrl(redirectUrl)
-          ? `/login?redirect=${encodeURIComponent(redirectUrl!)}&registered=true`
-          : '/login?registered=true';
-        router.push(loginUrl);
+        // 登録成功 → メール確認待ち画面を表示
+        setRegistrationSuccess({
+          success: data.success,
+          message: data.message,
+          type: data.type,
+        });
       } else {
         // ログイン成功後、redirectがあればそこへ、なければダッシュボードへ
         if (isValidRedirectUrl(redirectUrl)) {
@@ -105,6 +114,47 @@ export default function AuthForm({ mode }: AuthFormProps) {
       setLoading(false);
     }
   };
+
+  // 登録成功時のメール確認待ち画面
+  if (registrationSuccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="max-w-md w-full space-y-6 p-8 bg-white rounded-lg shadow-md text-center">
+          <div className="flex justify-center">
+            <div className="p-4 bg-blue-100 rounded-full">
+              <Mail className="h-12 w-12 text-blue-600" />
+            </div>
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">
+              確認メールを送信しました
+            </h2>
+            <p className="mt-4 text-gray-600">
+              <span className="font-medium text-gray-900">{email}</span> に確認メールを送信しました。
+            </p>
+            <p className="mt-2 text-gray-600">
+              {registrationSuccess.type === 'register'
+                ? 'メール内のリンクをクリックして、アカウント登録を完了してください。'
+                : 'メール内のリンクをクリックして、パスワードの設定を完了してください。'}
+            </p>
+          </div>
+          <div className="pt-4 border-t border-gray-200">
+            <p className="text-sm text-gray-500">
+              メールが届かない場合は、迷惑メールフォルダをご確認ください。
+            </p>
+          </div>
+          <div>
+            <a
+              href="/login"
+              className="text-blue-600 hover:text-blue-500 text-sm font-medium"
+            >
+              ログインページへ戻る
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">

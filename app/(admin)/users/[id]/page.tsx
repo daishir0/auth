@@ -31,6 +31,7 @@ interface UserData {
   email: string;
   isActive: boolean;
   createdAt: string;
+  lastLoginAt?: string | null;
   profile?: {
     displayName?: string | null;
     firstName?: string | null;

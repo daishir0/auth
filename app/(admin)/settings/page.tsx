@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Settings, KeyRound, Shield } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { KeyRound, Clock, Mail } from 'lucide-react';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface SettingItem {
   title: string;
@@ -17,6 +17,18 @@ const settingItems: SettingItem[] = [
     description: 'Google アカウントでのログインを設定',
     href: '/settings/google-sso',
     icon: KeyRound,
+  },
+  {
+    title: 'トークン設定',
+    description: 'アクセストークン・リフレッシュトークンの有効期限を設定',
+    href: '/settings/tokens',
+    icon: Clock,
+  },
+  {
+    title: 'メール設定 (Amazon SES)',
+    description: 'メール確認などのメール送信機能を設定',
+    href: '/settings/ses',
+    icon: Mail,
   },
 ];
 

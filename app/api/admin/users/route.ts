@@ -62,6 +62,12 @@ export async function GET(request: NextRequest) {
         where,
         include: {
           profile: true,
+          credential: {
+            select: {
+              hashedPassword: true,
+              googleId: true,
+            },
+          },
           globalRoles: {
             include: {
               role: true,
@@ -104,6 +110,7 @@ export async function GET(request: NextRequest) {
         email: user.email,
         isActive: user.isActive,
         createdAt: user.createdAt,
+        lastLoginAt: user.lastLoginAt,
         profile: user.profile
           ? {
               displayName: user.profile.displayName,
@@ -120,6 +127,10 @@ export async function GET(request: NextRequest) {
               position: user.organizationMemberships[0].position?.name,
             }
           : null,
+        authMethods: {
+          hasPassword: !!user.credential?.hashedPassword,
+          hasGoogle: !!user.credential?.googleId,
+        },
       })),
       pagination: {
         page,

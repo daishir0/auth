@@ -37,6 +37,12 @@ export async function GET(request: NextRequest) {
       where: { id: payload.userId },
       include: {
         profile: true,
+        credential: {
+          select: {
+            hashedPassword: true,
+            googleId: true,
+          },
+        },
         globalRoles: {
           include: {
             role: true,
@@ -102,6 +108,10 @@ export async function GET(request: NextRequest) {
             code: om.position.code,
           } : null,
         })),
+        authMethods: {
+          hasPassword: !!user.credential?.hashedPassword,
+          hasGoogle: !!user.credential?.googleId,
+        },
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },

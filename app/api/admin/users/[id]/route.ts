@@ -93,6 +93,7 @@ export async function GET(
         email: user.email,
         isActive: user.isActive,
         createdAt: user.createdAt,
+        lastLoginAt: user.lastLoginAt,
         profile: user.profile,
         roles: user.globalRoles.map((ur) => ur.role.name),
         organizations: user.organizationMemberships.map((om) => ({
