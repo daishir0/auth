@@ -52,3 +52,10 @@ playwright-report/
 
 # Environment variables
 .env
+
+# 本タスク外の未追跡/未コミット項目（本タスクと分離するため除外）
+/.cc-rsg/
+/SPECIFICATION.md
+/SPECIFICATION_CHAPTER*.md
+/CLAUDE.md
+/public/avatars/
