@@ -2,226 +2,184 @@
 
 ## 概要
 
-認証サービスのセキュリティ設計と、本番環境への移行時の注意事項について説明します。
+`auth.senku.work` のセキュリティ設計と運用ガイド。本書は **2026-05 の OAuth2 強化フェーズ** 以降の最新仕様。
 
 ---
 
-## セキュリティ設計
+## 認証・トークン設計
 
-### 認証方式
-
-本サービスは以下の認証方式を採用しています：
+### トークン仕様
 
 | 要素 | 実装 |
 |------|------|
-| アクセストークン | JWT（HS256） |
-| リフレッシュトークン | Opaque Token（ランダム文字列） |
-| パスワードハッシュ | argon2id |
-| トークン保存 | httpOnly Cookie |
+| アクセストークン | **JWT (RS256)** + jose ライブラリ、`exp=15min` |
+| ID Token (OIDC) | JWT (RS256)、`exp=1h`、nonce 検証 |
+| リフレッシュトークン | Opaque 32B hex、DB 管理、`exp=30d`、ローテーション |
+| 認可コード | 32B hex、`exp=10min`、PKCE 必須（S256） |
+| パスワードハッシュ | **argon2id** |
+| クライアントシークレットハッシュ | Argon2id |
+| トークン保存 | HttpOnly + Secure + SameSite=Lax Cookie |
+| 鍵管理 | RSA 2048-bit、`keys/private.pem` + JWK 公開 (`/.well-known/jwks.json`) |
+| `kid` (Key ID) | `OAUTH_KEY_ID` 環境変数（例: `auth-key-001`） |
+
+> **2026-05 で旧 HS256 経路 (`lib/auth.ts`) は完全廃止**。すべて RS256 統一。
+
+### Cookie 属性
+
+- `Secure`: 必須（HTTPSのみ）
+- `HttpOnly`: 必須（XSS 対策）
+- `SameSite=Lax`: 標準
+- `Path=/`、ドメイン指定なし
 
 ---
 
-## JWT 設定
+## 認可・アクセス制御
 
-### 現在の設定
+### RBAC
 
-| 設定項目 | 値 | 説明 |
-|----------|-----|------|
-| アルゴリズム | HS256 | HMAC SHA-256 |
-| アクセストークン有効期限 | 15分 | 短めの設定で漏洩リスクを軽減 |
-| リフレッシュトークン有効期限 | 30日 | 長期セッション維持 |
+- `GlobalRole`（`super_admin`, `admin`, `user` 等）+ `GlobalRolePermission`
+- `UserGlobalRole` で User とロールを紐付け
+- 管理画面の各メニュー表示は `super_admin`/`admin` ロールでガード
 
-### シークレットキー管理
+### アプリ単位の利用許可
 
-**重要**: JWT シークレットキーは本番環境で必ず変更してください。
-
-```env
-# 開発環境のデフォルト（絶対に本番で使用しない）
-JWT_SECRET=fallback-secret-do-not-use-in-production
-
-# 本番環境用（強力なランダム文字列を生成）
-JWT_SECRET=<強力なランダム文字列>
-```
-
-**シークレットキーの生成方法**:
-
-```bash
-# Node.js で生成
-node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-
-# OpenSSL で生成
-openssl rand -hex 64
-```
-
-**推奨**:
-- 最低 256 ビット（32 バイト）以上
-- 本番と開発で異なるキーを使用
-- シークレットキーは絶対にコードにハードコードしない
-- 定期的にローテーション（3〜6ヶ月ごと）
+`UserApplicationAccess` テーブルで「ユーザー × OAuthClient」の許可を管理。`/oauth/authorize` で許可されていないクライアントへの認可は `access_denied`。
 
 ---
 
-## パスワードハッシュ（argon2id）
+## OAuth 2.0 / OIDC
 
-### 現在の設定
+### サポート機能
 
-```typescript
-{
-  type: argon2.argon2id,  // argon2id バリアント（推奨）
-  memoryCost: 65536,      // 64MB のメモリ使用
-  timeCost: 3,            // 3 回の反復
-  parallelism: 4,         // 4 スレッド並列
-}
-```
-
-### 設定の意味
-
-| パラメータ | 値 | 説明 |
-|------------|-----|------|
-| type | argon2id | argon2i と argon2d のハイブリッド。サイドチャネル攻撃と GPU 攻撃の両方に耐性 |
-| memoryCost | 65536 | 64MB のメモリを使用。GPU ベースの攻撃を困難にする |
-| timeCost | 3 | 計算時間を増加させ、ブルートフォース攻撃を遅延 |
-| parallelism | 4 | 4 コアを使用して並列計算 |
-
-### セキュリティレベル
-
-この設定は OWASP の推奨設定を満たしています。本番環境でサーバーの性能に応じて調整可能です。
-
----
-
-## Cookie 設定
-
-### 現在の設定
-
-```typescript
-{
-  httpOnly: true,                              // JavaScript からアクセス不可
-  secure: process.env.NODE_ENV === 'production', // HTTPS のみ（本番環境）
-  sameSite: 'lax',                             // CSRF 保護
-  maxAge: 15 * 60,                             // 有効期限
-  path: '/',                                   // 全パスで有効
-}
-```
-
-### 各オプションの説明
-
-| オプション | 値 | セキュリティ効果 |
-|------------|-----|------------------|
-| httpOnly | true | XSS 攻撃からトークンを保護 |
-| secure | true（本番） | HTTPS 接続でのみ送信 |
-| sameSite | lax | 基本的な CSRF 保護 |
-| path | / | サービス全体で使用可能 |
-
----
-
-## 本番環境移行時の注意点
-
-### 必須チェックリスト
-
-- [ ] **JWT シークレットの変更**: 強力なランダム文字列に変更
-- [ ] **HTTPS の有効化**: SSL/TLS 証明書を設定
-- [ ] **環境変数の確認**: `.env` ファイルがバージョン管理に含まれていないことを確認
-- [ ] **データベースのバックアップ**: 定期的なバックアップを設定
-- [ ] **ログの設定**: エラーログを適切に収集・監視
-
-### 環境変数の設定
-
-```env
-# 本番環境の .env
-NODE_ENV=production
-JWT_SECRET=<強力なランダム文字列>
-```
-
-### HTTPS の強制
-
-本番環境では必ず HTTPS を使用してください。Cookie の `secure` フラグは `NODE_ENV=production` で自動的に有効になります。
-
-### リバースプロキシの設定例（nginx）
-
-```nginx
-server {
-    listen 443 ssl;
-    server_name auth.example.com;
-
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
-
-    location / {
-        proxy_pass http://localhost:3019;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
----
-
-## セキュリティ考慮事項
-
-### 実装済みの保護
-
-| 脅威 | 対策 |
+| 機能 | 実装 |
 |------|------|
-| パスワード漏洩 | argon2id ハッシュ |
-| XSS | httpOnly Cookie |
-| CSRF | sameSite Cookie |
-| トークン漏洩 | 短い有効期限（15分） |
-| セッションハイジャック | トークンローテーション |
-| ブルートフォース | (未実装) レート制限を追加推奨 |
+| Authorization Code Flow | ✓ |
+| PKCE | ✓ S256 のみ（plain 廃止） |
+| Refresh Token (ローテーション) | ✓ |
+| Discovery | ✓ `/.well-known/openid-configuration` |
+| JWKS | ✓ `/.well-known/jwks.json` |
+| Revocation (RFC 7009) | ✓ |
+| Introspection (RFC 7662) | ✓ |
+| Client Credentials Flow | 未実装 |
+| 動的クライアント登録 | 未実装 |
+| Implicit Flow | 未対応（脆弱性のため） |
 
-### 今後の改善推奨事項
+### `LEGACY_API_ENABLED=false`
 
-1. **レート制限の追加**
-   - ログイン試行回数の制限
-   - IP ベースのブロッキング
-
-2. **2要素認証（2FA）の追加**
-   - TOTP（Google Authenticator 等）
-   - メールベースの確認
-
-3. **監査ログの追加**
-   - ログイン成功/失敗の記録
-   - パスワード変更の記録
-
-4. **パスワードポリシーの強化**
-   - 複雑性要件（大文字、小文字、数字、記号）
-   - 過去のパスワードの再利用防止
-
-5. **アカウントロックアウト**
-   - 連続失敗時の一時的ロック
+旧 REST API (`/api/auth/{login,logout,me,refresh,verify}`) は 410 Gone。代替:
+- 外部クライアント → OIDC (`/oauth/*`)
+- auth 管理画面内部 → `/api/admin/auth/*`
 
 ---
 
-## インシデント対応
+## CORS
 
-### トークン漏洩が疑われる場合
+**ホワイトリスト方式** (`lib/cors.ts`)。ワイルドカード `*` 禁止。
 
-1. **即座に JWT シークレットを変更**
-   - すべての既存トークンが無効になります
-
-2. **データベースのリフレッシュトークンを削除**
-   ```bash
-   npx prisma db execute --stdin <<< "DELETE FROM RefreshToken;"
-   ```
-
-3. **影響を受けたユーザーに通知**
-
-### 不正アクセスの調査
-
-```bash
-# Prisma Studio でアクセスログを確認
-npx prisma studio
-
-# ユーザーのリフレッシュトークンを確認
-# 不審な数のトークンがある場合は調査
+設定:
+```env
+CORS_ALLOWED_ORIGINS="https://policy-manager.senku.work,https://policy-manager-dev.senku.work"
 ```
 
+未許可オリジンには `Access-Control-Allow-Origin` ヘッダ自体を返さない。
+
 ---
 
-## 関連ドキュメント
+## レート制限
 
-- [ユーザーガイド](./document.md) - システムの使い方
-- [API リファレンス](./API.md) - API の詳細仕様
-- [セットアップガイド](./SETUP.md) - 開発環境の構築手順
+**Redis** ベース (`lib/rate-limit.ts`) で分散対応。`ioredis` 経由で localhost Redis に接続。
+
+| エンドポイント | 上限 |
+|----------------|------|
+| `/oauth/token` | 20 req/min/IP |
+
+Redis 接続失敗時は **fail-open**（rate limit が機能しないだけでサービスは継続）。
+
+---
+
+## アカウントロック
+
+| 項目 | 値 |
+|------|-----|
+| 失敗閾値 | 5 回 |
+| ロック期間 | 15 分 |
+| 管理画面ログイン (`/api/admin/auth/login`) | 対象 |
+
+DB: `UserCredential.failedLoginAttempts`, `lockedUntil`
+
+---
+
+## 監査ログ (SecurityLog)
+
+| アクション | 記録タイミング |
+|------------|----------------|
+| `login_success` / `login_failed` | `/api/admin/auth/login` |
+| `oauth_authorize` | `/oauth/authorize` 認可コード発行 |
+| `oauth_token_issued` | Authorization Code Grant 成功 |
+| `oauth_token_refreshed` | Refresh Token Grant 成功 |
+| `oauth_token_revoked` | `/oauth/revoke` 成功 |
+| 管理者操作（アプリ作成・アクセス権付与等） | 各管理API |
+
+記録項目: `userId`, `action`, `ipAddress`, `userAgent`, `details` (JSON)
+
+PII（トークン全文）は記録しない。
+
+---
+
+## シークレット管理
+
+### 環境変数（`.env.local`、`.gitignore` 必須）
+
+| 変数 | 用途 |
+|------|------|
+| `DATABASE_URL` | PostgreSQL 接続情報 |
+| `OAUTH_ISSUER` | 公開 issuer URL |
+| `OAUTH_KEY_ID` | JWK kid |
+| `ENCRYPTION_SECRET` | DB暗号化用（Google SSO secret 等） |
+| `CORS_ALLOWED_ORIGINS` | カンマ区切りホワイトリスト |
+| `LEGACY_API_ENABLED` | `false` |
+| `REDIS_URL` | Redis 接続（password付き URL） |
+| `NODE_ENV` | `production` |
+| `JWT_SECRET` | 旧HS256用（互換のため残るが未使用） |
+
+### RSA 鍵
+
+`keys/private.pem` は自動生成 (`generateAndSaveKeyPairSync()`)、`.gitignore` 必須。
+
+### クライアントシークレット再発行
+
+`scripts/rotate-secrets.mjs` 実行で OAuthClient レコードを更新。Argon2id ハッシュは DB に、平文は実行者がアプリ側 `.env` に反映。
+
+---
+
+## 本番運用チェックリスト
+
+- [ ] `NODE_ENV=production` 確認
+- [ ] `LEGACY_API_ENABLED=false`
+- [ ] `CORS_ALLOWED_ORIGINS` がホワイトリスト（`*` 禁止）
+- [ ] `JWT_SECRET`, `ENCRYPTION_SECRET` が仮値ではない
+- [ ] Redis `requirepass` 設定 + `bind 127.0.0.1`
+- [ ] systemd `auth.service` の `After=redis-server.service`
+- [ ] PostgreSQL バックアップ（policy-manager 同等の運用）
+- [ ] `/keys/` ディレクトリのバックアップ（紛失すると既存トークン全失効）
+- [ ] HTTPS 必須、HTTP 受付なし
+- [ ] SecurityLog の保管期間ポリシー策定
+
+---
+
+## 既知の制限
+
+- MFA: スキーマあり (`mfaEnabled`, `mfaSecret`) だが、未実装
+- パスワードリセット: メール検証フローは実装、運用テスト未実施
+- Email Verification: 必須化されていない（emailVerified=true で初期化される）
+
+---
+
+## インシデント時の対応
+
+| 事象 | 対応 |
+|------|------|
+| RSA 秘密鍵漏洩 | `keys/` を削除→自動再生成→全 access_token/refresh_token 無効化（DB Cleanup）→ 全ユーザー再ログイン |
+| クライアントシークレット漏洩 | `scripts/rotate-secrets.mjs` 実行 → 該当アプリ `.env` 更新 → restart |
+| アカウント乗っ取り疑い | `SecurityLog` を `userId` で精査 → 該当ユーザーの RefreshToken 削除 → password reset |
+| Redis 障害 | rate-limit のみ無効化（fail-open）、auth 自体は継続 |

@@ -2,164 +2,99 @@
 
 ## 概要
 
-このドキュメントでは、認証マイクロサービスの使い方について説明します。
+`auth.senku.work` で稼働する **OAuth 2.0 / OpenID Connect (OIDC)** 認証基盤の公式ドキュメントです。Next.js 15 で構築され、社内の複数アプリケーションに対する **シングルサインオン（SSO）** を提供します。
 
-認証サービスは Next.js 14 で構築されており、以下の機能を提供します：
+### 主な機能
 
-- ユーザー登録
-- ログイン / ログアウト
-- JWT によるアクセストークン管理
-- リフレッシュトークンによるセッション維持
-- ロールベースの権限管理
+- **OAuth 2.0 / OIDC 認証**: Authorization Code Flow + PKCE、Refresh Token、Discovery、JWKS、Revoke、Introspect
+- **ユーザー管理**: 自己登録、メール検証、管理者によるユーザー管理、組織・役職管理
+- **権限管理**: グローバルロール / ロール権限の RBAC、アプリ単位の利用許可（UserApplicationAccess）
+- **多要素のログイン**: メール+パスワード（Argon2id）、Google SSO
+- **管理画面**: ダッシュボード、アプリ管理、ユーザー管理、組織管理、SecurityLog 閲覧
+- **本番運用機能**: Redis レート制限、SecurityLog による監査、CORS ホワイトリスト
 
 ---
 
-## クイックスタート
+## 役割と関係
 
-### 1. サービスの起動
+| 役割 | 例 |
+|------|-----|
+| **OpenID Provider (OP)** | `auth.senku.work` （本サービス） |
+| **Relying Party (RP)** | `policy-manager.senku.work`, `policy-manager-dev.senku.work` 等の利用側アプリ |
+| **End User** | ブラウザのユーザー |
 
-```bash
-cd auth
-npm run dev
-```
+RP は OIDC Discovery 経由で OP の設定を自動取得し、Authorization Code Flow を行う。
 
-デフォルトで `http://localhost:3019` でサービスが起動します。
+---
 
-### 2. 画面へのアクセス
+## サービスURL
+
+| 環境 | URL | ポート |
+|------|-----|--------|
+| 本番 | https://auth.senku.work | 3019 (Nginx upstream) |
+
+---
+
+## 画面（管理画面）
 
 | 画面 | URL | 説明 |
 |------|-----|------|
-| トップページ | http://localhost:3019 | サービスのトップ |
-| ログイン | http://localhost:3019/login | ログイン画面 |
-| 新規登録 | http://localhost:3019/register | ユーザー登録画面 |
-| ダッシュボード | http://localhost:3019/dashboard | 認証後の画面 |
+| ログイン | `/login` | メール/パスワード or Google でログイン |
+| 新規登録 | `/register` | メール検証付きで自己登録 |
+| ダッシュボード | `/dashboard` | 連携アプリの一覧 |
+| プロフィール | `/profile` | 自分の情報を編集 |
+| 使い方（管理者のみ） | `/guide` | OIDC 連携手順 |
+| ユーザー管理（管理者のみ） | `/users` | ユーザー CRUD |
+| 組織管理（管理者のみ） | `/organizations` | 組織 CRUD |
+| 役職管理（管理者のみ） | `/positions` | 役職 CRUD |
+| アプリケーション管理（管理者のみ） | `/applications` | OAuth クライアント CRUD |
+| システム設定（管理者のみ） | `/settings` | Google SSO、SES、トークン設定 |
 
 ---
 
-## UI 画面の使い方
+## OAuth クライアント連携（外部アプリ視点）
 
-### ログイン画面 (`/login`)
+新規アプリを auth に接続する4ステップ:
 
-1. メールアドレスを入力
-2. パスワードを入力
-3. 「Login」ボタンをクリック
-4. 認証成功時、自動的にダッシュボードへリダイレクト
-
-**新規登録へのリンク**: 画面下部の「Register」リンクから登録画面へ移動できます。
-
-### 新規登録画面 (`/register`)
-
-1. メールアドレスを入力
-2. パスワードを入力（8文字以上）
-3. 「Register」ボタンをクリック
-4. 登録成功時、ログイン画面へリダイレクト
-
-**制約**:
-- メールアドレスは一意である必要があります
-- パスワードは8文字以上が必要です
-
-### ダッシュボード (`/dashboard`)
-
-認証済みユーザーのみアクセス可能な画面です。
-
-表示内容：
-- **User ID**: ユーザーの一意識別子
-- **Email**: 登録メールアドレス
-- **Roles**: 付与されているロール（バッジ表示）
-- **Created At**: アカウント作成日時
-
-**ログアウト**: 右上の「Logout」ボタンでログアウトできます。
-
----
-
-## 現在のユーザー一覧
-
-初期セットアップ後、以下のテストユーザーが存在します：
-
-| Email | パスワード | Roles | 説明 |
-|-------|-----------|-------|------|
-| test@example.com | password123 | user | 一般ユーザー |
-| admin@example.com | adminpass123 | user, admin | 管理者ユーザー |
-
-**補足**: CLI テストで作成されたユーザーも存在する場合があります。
-
----
-
-## 認証フロー
-
-```
-[ユーザー] → [ログイン] → [アクセストークン + リフレッシュトークン発行]
-                              ↓
-                    [Cookie に自動保存]
-                              ↓
-              [保護されたリソースにアクセス可能]
-```
-
-### トークンの有効期限
-
-| トークン | 有効期限 |
-|----------|----------|
-| アクセストークン | 15分 |
-| リフレッシュトークン | 30日 |
-
-アクセストークンの期限切れ後は、リフレッシュトークンを使用して新しいトークンを取得できます。
-
----
-
-## トラブルシューティング
-
-### ログインできない
-
-**症状**: 正しい認証情報を入力してもログインできない
-
-**確認事項**:
-1. メールアドレスとパスワードが正しいか確認
-2. パスワードは大文字・小文字を区別します
-3. データベースにユーザーが存在するか確認
-
-**対処**:
-```bash
-# データベースの内容を確認
-npx prisma studio
-```
-
-### セッションがすぐ切れる
-
-**症状**: ログイン後すぐにログアウトされる
-
-**原因**: アクセストークンの期限切れ後、リフレッシュが正常に動作していない可能性
-
-**確認事項**:
-1. Cookie が正常に保存されているか（ブラウザの開発者ツール → Application → Cookies）
-2. `/api/auth/refresh` エンドポイントが正常に動作しているか
-
-### 登録できない
-
-**症状**: 新規登録時にエラーが表示される
-
-**エラー別対処**:
-
-| エラーメッセージ | 原因 | 対処 |
-|------------------|------|------|
-| Email already registered | メールアドレスが既に使用されている | 別のメールアドレスを使用 |
-| Password must be at least 8 characters | パスワードが短い | 8文字以上のパスワードを設定 |
-| Email and password are required | 入力が空 | 全ての項目を入力 |
-
-### データベースの初期化
-
-問題が解決しない場合、データベースを再初期化できます：
-
-```bash
-# データベースを削除して再作成
-rm -rf db/auth.db
-npx prisma migrate dev --name init
-npm run seed
-```
+1. **管理画面 → アプリケーション → 新規登録**
+   - 名前、リダイレクト URI（例: `https://myapp.example.com/api/auth/callback/auth-provider`）
+2. **Client ID / Client Secret 取得**
+3. **アプリの `.env` に設定**
+   ```env
+   AUTH_PROVIDER_ID="<CLIENT_ID>"
+   AUTH_PROVIDER_SECRET="<CLIENT_SECRET>"
+   AUTH_PROVIDER_ISSUER="https://auth.senku.work"
+   ```
+4. **NextAuth.js (Auth.js) に OIDC プロバイダー登録**
+   ```ts
+   {
+     id: "auth-provider", name: "Auth Provider", type: "oidc",
+     issuer: process.env.AUTH_PROVIDER_ISSUER,
+     clientId: process.env.AUTH_PROVIDER_ID,
+     clientSecret: process.env.AUTH_PROVIDER_SECRET,
+     authorization: { params: { scope: "openid profile email custom" } },
+   }
+   ```
+5. **管理画面 → ユーザー管理 → 該当ユーザーにアプリ利用権限付与**（UserApplicationAccess）
 
 ---
 
 ## 関連ドキュメント
 
-- [API リファレンス](./API.md) - REST API の詳細仕様
-- [セットアップガイド](./SETUP.md) - 開発環境の構築手順
-- [セキュリティガイド](./SECURITY.md) - セキュリティに関する注意事項
+- [API.md](./API.md) - 全エンドポイント仕様
+- [SECURITY.md](./SECURITY.md) - セキュリティ設計と運用ガイド
+- [SETUP.md](./SETUP.md) - 開発・運用環境セットアップ
+
+---
+
+## 技術スタック
+
+| 項目 | 技術 |
+|------|------|
+| フレームワーク | Next.js 15.5 (App Router) |
+| 言語 | TypeScript 5.x |
+| データベース | PostgreSQL (Prisma 6) |
+| キャッシュ/レート制限 | Redis (ioredis) |
+| 認証ライブラリ | `jose` (RS256), `argon2` |
+| UI | TailwindCSS + shadcn/ui |
+| デプロイ | systemd (Ubuntu) + Nginx リバースプロキシ |
