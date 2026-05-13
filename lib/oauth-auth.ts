@@ -324,34 +324,3 @@ export function hashClientSecret(secret: string): string {
   return createHash('sha256').update(secret).digest('hex');
 }
 
-// 後方互換性のため、レガシーHS256もサポート
-const LEGACY_JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'fallback-secret-do-not-use-in-production'
-);
-
-/**
- * レガシーアクセストークン（HS256）を生成
- */
-export async function generateLegacyAccessToken(payload: TokenPayload): Promise<string> {
-  return new SignJWT({ ...payload })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime(ACCESS_TOKEN_EXPIRES_IN)
-    .sign(LEGACY_JWT_SECRET);
-}
-
-/**
- * レガシーアクセストークン（HS256）を検証
- */
-export async function verifyLegacyAccessToken(token: string): Promise<TokenPayload | null> {
-  try {
-    const { payload } = await jwtVerify(token, LEGACY_JWT_SECRET);
-    return {
-      userId: payload.userId as string,
-      email: payload.email as string,
-      roles: payload.roles as string[],
-    };
-  } catch {
-    return null;
-  }
-}

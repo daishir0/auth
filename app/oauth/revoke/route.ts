@@ -7,20 +7,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { verifyClientCredentials } from '@/lib/oauth-auth';
+import { corsHeaders } from '@/lib/cors';
 
-// CORSヘッダー
-function corsHeaders() {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  };
-}
-
-export async function OPTIONS() {
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get('origin');
   return new NextResponse(null, {
     status: 204,
-    headers: corsHeaders(),
+    headers: corsHeaders(origin),
   });
 }
 
@@ -55,6 +48,7 @@ function getClientCredentials(request: NextRequest): { clientId?: string; client
 }
 
 export async function POST(request: NextRequest) {
+  const origin = request.headers.get('origin');
   try {
     const { clientId, clientSecret } = getClientCredentials(request);
 
@@ -68,7 +62,7 @@ export async function POST(request: NextRequest) {
       if (!client || !(await verifyClientCredentials(clientSecret, client.clientSecret))) {
         return NextResponse.json(
           { error: 'invalid_client', error_description: 'Invalid client credentials' },
-          { status: 401, headers: corsHeaders() }
+          { status: 401, headers: corsHeaders(origin) }
         );
       }
     }
@@ -78,7 +72,7 @@ export async function POST(request: NextRequest) {
     if (!body.token) {
       return NextResponse.json(
         { error: 'invalid_request', error_description: 'token is required' },
-        { status: 400, headers: corsHeaders() }
+        { status: 400, headers: corsHeaders(origin) }
       );
     }
 
@@ -91,7 +85,7 @@ export async function POST(request: NextRequest) {
       // クライアント認証されている場合、クライアントIDを検証
       if (client && refreshToken.clientId && refreshToken.clientId !== client.id) {
         // RFC 7009: トークンが見つからない場合と同じ応答（セキュリティ上）
-        return new NextResponse(null, { status: 200, headers: corsHeaders() });
+        return new NextResponse(null, { status: 200, headers: corsHeaders(origin) });
       }
 
       await prisma.refreshToken.delete({
@@ -114,12 +108,12 @@ export async function POST(request: NextRequest) {
     }
 
     // RFC 7009: 成功の場合は200 OKを返す（トークンが存在しなかった場合も）
-    return new NextResponse(null, { status: 200, headers: corsHeaders() });
+    return new NextResponse(null, { status: 200, headers: corsHeaders(origin) });
   } catch (error) {
     console.error('Revoke endpoint error:', error);
     return NextResponse.json(
       { error: 'server_error', error_description: 'Internal server error' },
-      { status: 500, headers: corsHeaders() }
+      { status: 500, headers: corsHeaders(origin) }
     );
   }
 }

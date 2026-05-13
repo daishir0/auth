@@ -12,47 +12,38 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken, verifyLegacyAccessToken } from '@/lib/oauth-auth';
+import { verifyAccessToken } from '@/lib/oauth-auth';
+import { corsHeaders } from '@/lib/cors';
 
-// CORSヘッダー
-function corsHeaders() {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  };
-}
-
-export async function OPTIONS() {
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get('origin');
   return new NextResponse(null, {
     status: 204,
-    headers: corsHeaders(),
+    headers: corsHeaders(origin),
   });
 }
 
 async function handleUserInfo(request: NextRequest) {
+  const origin = request.headers.get('origin');
   // Authorization ヘッダーからトークンを取得
   const authHeader = request.headers.get('Authorization');
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return NextResponse.json(
       { error: 'invalid_token', error_description: 'Bearer token required' },
-      { status: 401, headers: { ...corsHeaders(), 'WWW-Authenticate': 'Bearer' } }
+      { status: 401, headers: { ...corsHeaders(origin), 'WWW-Authenticate': 'Bearer' } }
     );
   }
 
   const token = authHeader.slice(7);
 
-  // トークンを検証（RS256を試行、失敗したらHS256）
+  // アクセストークンを検証（RS256）
   let payload = await verifyAccessToken(token);
-  if (!payload) {
-    payload = await verifyLegacyAccessToken(token);
-  }
 
   if (!payload) {
     return NextResponse.json(
       { error: 'invalid_token', error_description: 'Token is invalid or expired' },
-      { status: 401, headers: { ...corsHeaders(), 'WWW-Authenticate': 'Bearer error="invalid_token"' } }
+      { status: 401, headers: { ...corsHeaders(origin), 'WWW-Authenticate': 'Bearer error="invalid_token"' } }
     );
   }
 
@@ -102,14 +93,14 @@ async function handleUserInfo(request: NextRequest) {
   if (!user) {
     return NextResponse.json(
       { error: 'invalid_token', error_description: 'User not found' },
-      { status: 401, headers: { ...corsHeaders(), 'WWW-Authenticate': 'Bearer error="invalid_token"' } }
+      { status: 401, headers: { ...corsHeaders(origin), 'WWW-Authenticate': 'Bearer error="invalid_token"' } }
     );
   }
 
   if (!user.isActive) {
     return NextResponse.json(
       { error: 'invalid_token', error_description: 'User account is disabled' },
-      { status: 401, headers: { ...corsHeaders(), 'WWW-Authenticate': 'Bearer error="invalid_token"' } }
+      { status: 401, headers: { ...corsHeaders(origin), 'WWW-Authenticate': 'Bearer error="invalid_token"' } }
     );
   }
 
@@ -201,7 +192,7 @@ async function handleUserInfo(request: NextRequest) {
     }
   }
 
-  return NextResponse.json(userInfo, { headers: corsHeaders() });
+  return NextResponse.json(userInfo, { headers: corsHeaders(origin) });
 }
 
 export async function GET(request: NextRequest) {

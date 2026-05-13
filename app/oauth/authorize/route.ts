@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { generateAuthorizationCode, getAuthCodeExpiry, verifyAccessToken, verifyLegacyAccessToken } from '@/lib/oauth-auth';
+import { generateAuthorizationCode, getAuthCodeExpiry, verifyAccessToken } from '@/lib/oauth-auth';
 import { cookies } from 'next/headers';
 
 interface AuthorizeParams {
@@ -75,13 +75,8 @@ async function getCurrentUser(request: NextRequest): Promise<{ userId: string; e
   const token = accessToken || bearerToken;
   if (!token) return null;
 
-  // RS256トークンを試行
+  // アクセストークンを検証（RS256）
   let payload = await verifyAccessToken(token);
-
-  // 失敗したらHS256（レガシー）を試行
-  if (!payload) {
-    payload = await verifyLegacyAccessToken(token);
-  }
 
   if (!payload) return null;
 

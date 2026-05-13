@@ -14,20 +14,14 @@ import {
   verifyCodeChallenge,
   verifyClientCredentials,
 } from '@/lib/oauth-auth';
+import { corsHeaders } from '@/lib/cors';
+import { checkRateLimit } from '@/lib/rate-limit';
 
-// CORSヘッダー
-function corsHeaders() {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  };
-}
-
-export async function OPTIONS() {
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get('origin');
   return new NextResponse(null, {
     status: 204,
-    headers: corsHeaders(),
+    headers: corsHeaders(origin),
   });
 }
 
@@ -97,6 +91,17 @@ async function getUserRoles(userId: string): Promise<string[]> {
 }
 
 export async function POST(request: NextRequest) {
+  const origin = request.headers.get('origin');
+  // レートリミット
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? request.headers.get('x-real-ip') ?? 'unknown';
+  const rl = await checkRateLimit(`rl:token:${ip}`, 20, 60000);
+  if (!rl.allowed) {
+    const retryAfter = Math.ceil((rl.resetAt - Date.now()) / 1000);
+    return NextResponse.json(
+      { error: 'rate_limit_exceeded', retry_after: retryAfter },
+      { status: 429, headers: { ...corsHeaders(origin), 'Retry-After': retryAfter.toString() } }
+    );
+  }
   try {
     const body = await parseRequest(request);
     const { clientId, clientSecret } = getClientCredentials(request, body);
@@ -104,14 +109,14 @@ export async function POST(request: NextRequest) {
     if (!body.grant_type) {
       return NextResponse.json(
         { error: 'invalid_request', error_description: 'grant_type is required' },
-        { status: 400, headers: corsHeaders() }
+        { status: 400, headers: corsHeaders(origin) }
       );
     }
 
     if (!clientId) {
       return NextResponse.json(
         { error: 'invalid_request', error_description: 'client_id is required' },
-        { status: 400, headers: corsHeaders() }
+        { status: 400, headers: corsHeaders(origin) }
       );
     }
 
@@ -123,7 +128,7 @@ export async function POST(request: NextRequest) {
     if (!client || !client.isActive) {
       return NextResponse.json(
         { error: 'invalid_client', error_description: 'Client not found or inactive' },
-        { status: 401, headers: corsHeaders() }
+        { status: 401, headers: corsHeaders(origin) }
       );
     }
 
@@ -131,7 +136,7 @@ export async function POST(request: NextRequest) {
     if (clientSecret && !(await verifyClientCredentials(clientSecret, client.clientSecret))) {
       return NextResponse.json(
         { error: 'invalid_client', error_description: 'Invalid client credentials' },
-        { status: 401, headers: corsHeaders() }
+        { status: 401, headers: corsHeaders(origin) }
       );
     }
 
@@ -143,7 +148,7 @@ export async function POST(request: NextRequest) {
         if (!allowedGrants.includes('authorization_code')) {
           return NextResponse.json(
             { error: 'unauthorized_client', error_description: 'Grant type not allowed' },
-            { status: 400, headers: corsHeaders() }
+            { status: 400, headers: corsHeaders(origin) }
           );
         }
         return handleAuthorizationCodeGrant(request, body, client);
@@ -152,22 +157,22 @@ export async function POST(request: NextRequest) {
         if (!allowedGrants.includes('refresh_token')) {
           return NextResponse.json(
             { error: 'unauthorized_client', error_description: 'Grant type not allowed' },
-            { status: 400, headers: corsHeaders() }
+            { status: 400, headers: corsHeaders(origin) }
           );
         }
-        return handleRefreshTokenGrant(body, client);
+        return handleRefreshTokenGrant(request, body, client);
 
       default:
         return NextResponse.json(
           { error: 'unsupported_grant_type', error_description: 'Unsupported grant type' },
-          { status: 400, headers: corsHeaders() }
+          { status: 400, headers: corsHeaders(origin) }
         );
     }
   } catch (error) {
     console.error('Token endpoint error:', error);
     return NextResponse.json(
       { error: 'server_error', error_description: 'Internal server error' },
-      { status: 500, headers: corsHeaders() }
+      { status: 500, headers: corsHeaders(origin) }
     );
   }
 }
@@ -180,14 +185,14 @@ async function handleAuthorizationCodeGrant(
   if (!body.code) {
     return NextResponse.json(
       { error: 'invalid_request', error_description: 'code is required' },
-      { status: 400, headers: corsHeaders() }
+      { status: 400, headers: corsHeaders(origin) }
     );
   }
 
   if (!body.redirect_uri) {
     return NextResponse.json(
       { error: 'invalid_request', error_description: 'redirect_uri is required' },
-      { status: 400, headers: corsHeaders() }
+      { status: 400, headers: corsHeaders(origin) }
     );
   }
 
@@ -200,7 +205,7 @@ async function handleAuthorizationCodeGrant(
   if (!authCode) {
     return NextResponse.json(
       { error: 'invalid_grant', error_description: 'Invalid authorization code' },
-      { status: 400, headers: corsHeaders() }
+      { status: 400, headers: corsHeaders(origin) }
     );
   }
 
@@ -209,7 +214,7 @@ async function handleAuthorizationCodeGrant(
     await prisma.authorizationCode.delete({ where: { id: authCode.id } });
     return NextResponse.json(
       { error: 'invalid_grant', error_description: 'Authorization code expired' },
-      { status: 400, headers: corsHeaders() }
+      { status: 400, headers: corsHeaders(origin) }
     );
   }
 
@@ -222,7 +227,7 @@ async function handleAuthorizationCodeGrant(
     await prisma.authorizationCode.delete({ where: { id: authCode.id } });
     return NextResponse.json(
       { error: 'invalid_grant', error_description: 'Authorization code already used' },
-      { status: 400, headers: corsHeaders() }
+      { status: 400, headers: corsHeaders(origin) }
     );
   }
 
@@ -230,7 +235,7 @@ async function handleAuthorizationCodeGrant(
   if (authCode.clientId !== client.id) {
     return NextResponse.json(
       { error: 'invalid_grant', error_description: 'Authorization code was not issued to this client' },
-      { status: 400, headers: corsHeaders() }
+      { status: 400, headers: corsHeaders(origin) }
     );
   }
 
@@ -238,7 +243,7 @@ async function handleAuthorizationCodeGrant(
   if (authCode.redirectUri !== body.redirect_uri) {
     return NextResponse.json(
       { error: 'invalid_grant', error_description: 'redirect_uri mismatch' },
-      { status: 400, headers: corsHeaders() }
+      { status: 400, headers: corsHeaders(origin) }
     );
   }
 
@@ -247,7 +252,7 @@ async function handleAuthorizationCodeGrant(
     if (!body.code_verifier) {
       return NextResponse.json(
         { error: 'invalid_request', error_description: 'code_verifier is required' },
-        { status: 400, headers: corsHeaders() }
+        { status: 400, headers: corsHeaders(origin) }
       );
     }
 
@@ -255,7 +260,7 @@ async function handleAuthorizationCodeGrant(
     if (!verifyCodeChallenge(body.code_verifier, authCode.codeChallenge, method)) {
       return NextResponse.json(
         { error: 'invalid_grant', error_description: 'Invalid code_verifier' },
-        { status: 400, headers: corsHeaders() }
+        { status: 400, headers: corsHeaders(origin) }
       );
     }
   }
@@ -264,7 +269,7 @@ async function handleAuthorizationCodeGrant(
   if (!authCode.user.isActive) {
     return NextResponse.json(
       { error: 'invalid_grant', error_description: 'User account is disabled' },
-      { status: 400, headers: corsHeaders() }
+      { status: 400, headers: corsHeaders(origin) }
     );
   }
 
@@ -328,17 +333,19 @@ async function handleAuthorizationCodeGrant(
     response.id_token = idToken;
   }
 
-  return NextResponse.json(response, { headers: corsHeaders() });
+  return NextResponse.json(response, { headers: corsHeaders(origin) });
 }
 
 async function handleRefreshTokenGrant(
+  request: NextRequest,
   body: TokenRequest,
   client: { id: string; clientId: string }
 ) {
+  const origin = request.headers.get('origin');
   if (!body.refresh_token) {
     return NextResponse.json(
       { error: 'invalid_request', error_description: 'refresh_token is required' },
-      { status: 400, headers: corsHeaders() }
+      { status: 400, headers: corsHeaders(origin) }
     );
   }
 
@@ -351,7 +358,7 @@ async function handleRefreshTokenGrant(
   if (!storedToken) {
     return NextResponse.json(
       { error: 'invalid_grant', error_description: 'Invalid refresh token' },
-      { status: 400, headers: corsHeaders() }
+      { status: 400, headers: corsHeaders(origin) }
     );
   }
 
@@ -360,7 +367,7 @@ async function handleRefreshTokenGrant(
     await prisma.refreshToken.delete({ where: { id: storedToken.id } });
     return NextResponse.json(
       { error: 'invalid_grant', error_description: 'Refresh token expired' },
-      { status: 400, headers: corsHeaders() }
+      { status: 400, headers: corsHeaders(origin) }
     );
   }
 
@@ -368,7 +375,7 @@ async function handleRefreshTokenGrant(
   if (storedToken.clientId && storedToken.clientId !== client.id) {
     return NextResponse.json(
       { error: 'invalid_grant', error_description: 'Refresh token was not issued to this client' },
-      { status: 400, headers: corsHeaders() }
+      { status: 400, headers: corsHeaders(origin) }
     );
   }
 
@@ -376,7 +383,7 @@ async function handleRefreshTokenGrant(
   if (!storedToken.user.isActive) {
     return NextResponse.json(
       { error: 'invalid_grant', error_description: 'User account is disabled' },
-      { status: 400, headers: corsHeaders() }
+      { status: 400, headers: corsHeaders(origin) }
     );
   }
 
@@ -408,6 +415,17 @@ async function handleRefreshTokenGrant(
     }),
   ]);
 
+  // セキュリティログ
+  await prisma.securityLog.create({
+    data: {
+      userId: user.id,
+      action: 'oauth_token_refreshed',
+      ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+      userAgent: request.headers.get('user-agent') || 'unknown',
+      details: { client_id: client.clientId, scope, grant_type: 'refresh_token' },
+    },
+  });
+
   const response: Record<string, unknown> = {
     access_token: accessToken,
     token_type: 'Bearer',
@@ -425,5 +443,5 @@ async function handleRefreshTokenGrant(
     response.id_token = idToken;
   }
 
-  return NextResponse.json(response, { headers: corsHeaders() });
+  return NextResponse.json(response, { headers: corsHeaders(origin) });
 }

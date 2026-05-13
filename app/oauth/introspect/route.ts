@@ -6,21 +6,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifyAccessToken, verifyLegacyAccessToken, verifyClientCredentials } from '@/lib/oauth-auth';
+import { verifyAccessToken, verifyClientCredentials } from '@/lib/oauth-auth';
+import { corsHeaders } from '@/lib/cors';
 
-// CORSヘッダー
-function corsHeaders() {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  };
-}
-
-export async function OPTIONS() {
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get('origin');
   return new NextResponse(null, {
     status: 204,
-    headers: corsHeaders(),
+    headers: corsHeaders(origin),
   });
 }
 
@@ -55,6 +48,7 @@ function getClientCredentials(request: NextRequest): { clientId?: string; client
 }
 
 export async function POST(request: NextRequest) {
+  const origin = request.headers.get('origin');
   try {
     const { clientId, clientSecret } = getClientCredentials(request);
 
@@ -67,7 +61,7 @@ export async function POST(request: NextRequest) {
       if (!client || !(await verifyClientCredentials(clientSecret, client.clientSecret))) {
         return NextResponse.json(
           { error: 'invalid_client', error_description: 'Invalid client credentials' },
-          { status: 401, headers: corsHeaders() }
+          { status: 401, headers: corsHeaders(origin) }
         );
       }
     }
@@ -77,17 +71,13 @@ export async function POST(request: NextRequest) {
     if (!body.token) {
       return NextResponse.json(
         { error: 'invalid_request', error_description: 'token is required' },
-        { status: 400, headers: corsHeaders() }
+        { status: 400, headers: corsHeaders(origin) }
       );
     }
 
-    // アクセストークンを検証（RS256を試行、失敗したらHS256）
+    // アクセストークンを検証（RS256）
     let payload = await verifyAccessToken(body.token);
     let tokenType = 'access_token';
-
-    if (!payload) {
-      payload = await verifyLegacyAccessToken(body.token);
-    }
 
     if (!payload) {
       // リフレッシュトークンかもしれない
@@ -109,12 +99,12 @@ export async function POST(request: NextRequest) {
             exp: Math.floor(refreshToken.expiresAt.getTime() / 1000),
             iat: Math.floor(refreshToken.createdAt.getTime() / 1000),
           },
-          { headers: corsHeaders() }
+          { headers: corsHeaders(origin) }
         );
       }
 
       // トークンが無効
-      return NextResponse.json({ active: false }, { headers: corsHeaders() });
+      return NextResponse.json({ active: false }, { headers: corsHeaders(origin) });
     }
 
     // ユーザー情報を取得
@@ -123,7 +113,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      return NextResponse.json({ active: false }, { headers: corsHeaders() });
+      return NextResponse.json({ active: false }, { headers: corsHeaders(origin) });
     }
 
     // アクティブなトークン
@@ -137,13 +127,13 @@ export async function POST(request: NextRequest) {
         scope: 'openid profile email',
         // JWTからexp/iatを取得するのは難しいので省略
       },
-      { headers: corsHeaders() }
+      { headers: corsHeaders(origin) }
     );
   } catch (error) {
     console.error('Introspect endpoint error:', error);
     return NextResponse.json(
       { error: 'server_error', error_description: 'Internal server error' },
-      { status: 500, headers: corsHeaders() }
+      { status: 500, headers: corsHeaders(origin) }
     );
   }
 }
