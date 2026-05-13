@@ -63,7 +63,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
   useEffect(() => {
     // Google SSOの状態を取得
-    fetch('/api/auth/google/status')
+    fetch('/api/admin/auth/google/status')
       .then((res) => res.json())
       .then((data) => setGoogleSsoEnabled(data.enabled))
       .catch(() => setGoogleSsoEnabled(false));
@@ -75,7 +75,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
     setLoading(true);
 
     try {
-      const endpoint = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
+      const endpoint = mode === 'login' ? '/api/admin/auth/login' : '/api/admin/auth/register';
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {

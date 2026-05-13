@@ -4,7 +4,7 @@ import { getGoogleAuthUrl, generateState, getGoogleRedirectUri } from '@/lib/goo
 import { isGoogleSsoEnabled } from '@/lib/settings';
 
 /**
- * GET /api/auth/google
+ * GET /api/admin/auth/google
  * Google OAuth認証を開始（認可URLへリダイレクト）
  */
 export async function GET(request: NextRequest) {

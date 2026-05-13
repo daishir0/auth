@@ -145,5 +145,5 @@ export function generateState(): string {
  * Google OAuthのリダイレクトURIを取得
  */
 export function getGoogleRedirectUri(baseUrl: string): string {
-  return `${baseUrl}/api/auth/google/callback`;
+  return `${baseUrl}/api/admin/auth/google/callback`;
 }

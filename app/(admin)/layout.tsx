@@ -29,7 +29,7 @@ export default function AdminLayout({
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const response = await fetch('/api/auth/me');
+        const response = await fetch('/api/admin/auth/me');
 
         if (!response.ok) {
           router.push('/login');

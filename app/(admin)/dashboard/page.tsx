@@ -55,9 +55,9 @@ export default function DashboardPage() {
     const fetchData = async () => {
       try {
         const [userRes, statsRes, appsRes] = await Promise.all([
-          fetch('/api/auth/me'),
+          fetch('/api/admin/auth/me'),
           fetch('/api/admin/stats'),
-          fetch('/api/auth/me/applications'),
+          fetch('/api/admin/auth/me/applications'),
         ]);
 
         if (userRes.ok) {

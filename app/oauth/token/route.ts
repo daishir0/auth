@@ -182,6 +182,7 @@ async function handleAuthorizationCodeGrant(
   body: TokenRequest,
   client: { id: string; clientId: string }
 ) {
+  const origin = request.headers.get('origin');
   if (!body.code) {
     return NextResponse.json(
       { error: 'invalid_request', error_description: 'code is required' },

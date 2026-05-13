@@ -14,8 +14,8 @@ export function GoogleLoginButton({ redirectUrl, disabled }: GoogleLoginButtonPr
   const handleClick = () => {
     setLoading(true);
     const url = redirectUrl
-      ? `/api/auth/google?redirect=${encodeURIComponent(redirectUrl)}`
-      : '/api/auth/google';
+      ? `/api/admin/auth/google?redirect=${encodeURIComponent(redirectUrl)}`
+      : '/api/admin/auth/google';
     window.location.href = url;
   };
 

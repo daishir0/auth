@@ -24,7 +24,7 @@ function getClient(): Redis | null {
     client = new IORedis(url, {
       lazyConnect: false,
       maxRetriesPerRequest: 1,
-      enableOfflineQueue: false,
+      enableOfflineQueue: true,
     });
     client.on('error', (err) => {
       console.error('[rate-limit] redis error:', err.message);

@@ -12,7 +12,7 @@ export default function GoogleSsoSettingsPage() {
   const baseUrl = typeof window !== 'undefined'
     ? `${window.location.protocol}//${window.location.host}`
     : 'https://auth.senku.work';
-  const redirectUri = `${baseUrl}/api/auth/google/callback`;
+  const redirectUri = `${baseUrl}/api/admin/auth/google/callback`;
 
   return (
     <div className="space-y-6">

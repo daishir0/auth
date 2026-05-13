@@ -100,7 +100,7 @@ export default function GuidePage() {
               </p>
               <ul className="text-sm space-y-1 list-disc list-inside text-muted-foreground">
                 <li>アプリケーション名（例：My App）</li>
-                <li>リダイレクトURI（例：https://myapp.example.com/api/auth/callback/auth-provider）</li>
+                <li>リダイレクトURI（例：https://myapp.example.com/api/admin/auth/callback/auth-provider）</li>
               </ul>
               <Button variant="outline" size="sm" asChild>
                 <a href="/applications/new">

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { isGoogleSsoEnabled } from '@/lib/settings';
 
 /**
- * GET /api/auth/google/status
+ * GET /api/admin/auth/google/status
  * Google SSOが有効かどうかを返す（認証不要）
  */
 export async function GET() {

@@ -21,7 +21,7 @@ export default function ProfilePage() {
 
   const fetchUser = useCallback(async () => {
     try {
-      const response = await fetch('/api/auth/me');
+      const response = await fetch('/api/admin/auth/me');
       if (response.ok) {
         const data = await response.json();
         setUser(data.user);
