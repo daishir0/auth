@@ -233,7 +233,7 @@ curl -s -X POST https://auth.senku.work/api/admin/auth/login \
 
 ## 9. 開発・デプロイ運用
 
-`/home/ubuntu/daishiro/CLAUDE.md` の **パターン2**（prod のみに存在するサービス）に従う:
+prod 上で開発し、push 経路は cc 経由に集約する運用ルール（prod に GitHub 認証情報を置かないため）:
 
 1. prod 上で開発
 2. push 時は cc 側に rsync で一時コピー
