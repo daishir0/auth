@@ -23,6 +23,8 @@ async function upsertClient(opts) {
         grantTypes: ['authorization_code', 'refresh_token'],
         scopes: ['openid', 'profile', 'email', 'custom'],
         name: opts.name,
+        description: opts.description,
+        appUrl: opts.appUrl,
       },
     });
     console.log('Updated:', opts.clientId);
@@ -32,6 +34,8 @@ async function upsertClient(opts) {
         clientId: opts.clientId,
         clientSecret: hashed,
         name: opts.name,
+        description: opts.description,
+        appUrl: opts.appUrl,
         redirectUris: opts.redirectUris,
         grantTypes: ['authorization_code', 'refresh_token'],
         scopes: ['openid', 'profile', 'email', 'custom'],
@@ -45,6 +49,8 @@ await upsertClient({
   clientId: 'policy-manager-prod',
   secret: secretProd,
   name: 'Policy Manager (Prod)',
+  description: 'ポリシー文書管理システム（本番）',
+  appUrl: 'https://policy-manager.senku.work',
   redirectUris: ['https://policy-manager.senku.work/api/auth/callback/auth-provider'],
 });
 
@@ -52,6 +58,8 @@ await upsertClient({
   clientId: 'policy-manager-dev',
   secret: secretDev,
   name: 'Policy Manager (Dev)',
+  description: 'ポリシー文書管理システム（開発）',
+  appUrl: 'https://policy-manager-dev.senku.work',
   redirectUris: ['https://policy-manager-dev.senku.work/api/auth/callback/auth-provider'],
 });
 

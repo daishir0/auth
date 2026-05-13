@@ -181,7 +181,8 @@ const AuthProvider = {
   clientId: process.env.AUTH_PROVIDER_ID,
   clientSecret: process.env.AUTH_PROVIDER_SECRET,
   authorization: {
-    params: { scope: "openid profile email" }
+    // custom スコープを追加すると組織・役職情報も取得できる
+    params: { scope: "openid profile email custom" }
   },
 };
 
@@ -202,7 +203,8 @@ export const authOptions = {
   clientId: process.env.AUTH_PROVIDER_ID,
   clientSecret: process.env.AUTH_PROVIDER_SECRET,
   authorization: {
-    params: { scope: "openid profile email" }
+    // custom スコープを追加すると組織・役職情報も取得できる
+    params: { scope: "openid profile email custom" }
   },
 };`)}
                 >
@@ -325,6 +327,20 @@ export const authOptions = {
                     <code className="bg-muted px-1 rounded text-xs">/.well-known/jwks.json</code>
                   </td>
                   <td className="py-2 text-muted-foreground">公開鍵（JWT検証用）</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-4 font-medium">Revoke</td>
+                  <td className="py-2 pr-4">
+                    <code className="bg-muted px-1 rounded text-xs">/oauth/revoke</code>
+                  </td>
+                  <td className="py-2 text-muted-foreground">トークン無効化（RFC 7009）</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-4 font-medium">Introspect</td>
+                  <td className="py-2 pr-4">
+                    <code className="bg-muted px-1 rounded text-xs">/oauth/introspect</code>
+                  </td>
+                  <td className="py-2 text-muted-foreground">トークン状態確認（RFC 7662）</td>
                 </tr>
               </tbody>
             </table>

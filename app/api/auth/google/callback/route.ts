@@ -35,7 +35,7 @@ function isValidRedirectUrl(url: string, host: string): boolean {
 }
 
 /**
- * GET /api/admin/auth/google/callback
+ * GET /api/auth/google/callback
  * GoogleからのOAuthコールバック処理
  */
 export async function GET(request: NextRequest) {

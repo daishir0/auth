@@ -26,14 +26,14 @@ const mainNavItems = [
     href: '/profile',
     icon: User,
   },
+];
+
+const adminNavItems = [
   {
     title: '使い方',
     href: '/guide',
     icon: BookOpen,
   },
-];
-
-const adminNavItems = [
   {
     title: 'ユーザー管理',
     href: '/users',
