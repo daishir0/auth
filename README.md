@@ -1,85 +1,97 @@
-# auth - User Management Platform
+# auth - OAuth 2.0 / OpenID Connect Authentication Service
+
+[日本語版はこちら](#auth---認証基盤oauth-20--openid-connect)
 
 ## Overview
 
-An integrated user management platform built with Next.js 15. Provides authentication, authorization, and user management features, serving as a common user infrastructure for multiple services.
+OAuth 2.0 / OpenID Connect (OIDC) authentication service built with Next.js 15. Acts as an **OpenID Provider (OP)** for multiple internal applications, providing Single Sign-On (SSO) and centralized user management.
 
 ### Key Features
 
-- **Authentication**
-  - User registration, login, logout
-  - JWT (HS256) access tokens (15-minute expiration)
-  - Opaque refresh tokens (30-day expiration)
-  - Password hashing with argon2
-  - Account lockout (30-minute lockout after 5 failures)
+- **OAuth 2.0 / OpenID Connect**
+  - Authorization Code Flow with **PKCE (S256 only)**
+  - Refresh Token grant (rotation enabled)
+  - OIDC Discovery (`/.well-known/openid-configuration`)
+  - JWKS (`/.well-known/jwks.json`)
+  - Token Revocation (RFC 7009)
+  - Token Introspection (RFC 7662)
 
-- **OAuth 2.0 / OpenID Connect (OIDC)**
-  - Authorization Code Flow with PKCE
-  - Client management
-  - Scope-based authorization
-  - Custom scopes (organization, profile information)
+- **Authentication & Tokens**
+  - Access token: **JWT (RS256)**, 15-minute expiration
+  - ID token: JWT (RS256), 1-hour expiration
+  - Refresh token: Opaque, 30-day expiration with rotation
+  - Password hashing: **argon2id**
+  - Account lockout: 5 failures → 15-minute lock
+  - HttpOnly + Secure + SameSite=Lax cookies
 
-- **User Management**
-  - User profiles (display name, avatar, hire date, etc.)
-  - Many-to-many organization/position management
-  - Global role and permission management
-  - User search and filtering
+- **User & Access Management**
+  - User registration with email verification
+  - Google SSO
+  - RBAC (GlobalRole + Permissions)
+  - Per-application authorization (`UserApplicationAccess`)
+  - Organization / position management
 
-- **Administration**
-  - Organization hierarchy management
-  - Position master management
-  - Permission master management
-  - Audit logging
+- **Production Operations**
+  - Redis-based distributed rate limiting (`ioredis`)
+  - SecurityLog audit trail (login, token issued/refreshed/revoked, etc.)
+  - CORS whitelist (no wildcard)
+  - systemd + Nginx HTTPS reverse proxy
 
 ### Tech Stack
 
-- Next.js 15 / React 19
-- PostgreSQL + Prisma ORM
-- TypeScript
-- Tailwind CSS
+- **Framework**: Next.js 15.5 (App Router) / React 19 / TypeScript 5
+- **Database**: PostgreSQL 16+ via Prisma 6
+- **Cache / rate limit**: Redis 7+
+- **Auth libraries**: `jose` (RS256), `argon2`
+- **UI**: Tailwind CSS + shadcn/ui
 
 ## Prerequisites
 
 - Node.js 20+
-- PostgreSQL 15+
+- PostgreSQL 16+
+- Redis 7+ (with `requirepass`)
+- Nginx (HTTPS reverse proxy)
 
-## Installation
+## Quick Start
 
 ```bash
-# 1. Clone the repository
-git clone <your-repo-url>
-cd auth
-
-# 2. Install dependencies
+# 1. Install
 npm install
 
-# 3. Configure environment variables
-cp .env.local.example .env.local
-# Edit .env.local with your settings
+# 2. Configure env (see docs/SETUP.md for full template)
+# .env.local: DATABASE_URL, OAUTH_ISSUER, OAUTH_KEY_ID,
+#             CORS_ALLOWED_ORIGINS, LEGACY_API_ENABLED=false,
+#             REDIS_URL, JWT_SECRET, ENCRYPTION_SECRET
 
-# 4. Run database migrations
+# 3. Migrate
 npx prisma migrate deploy
+npx prisma generate
 
-# 5. Start development server
-npm run dev
+# 4. Build & run
+npm run build
+npm run start  # listens on port 3019
 ```
 
-The server starts at http://localhost:3019
+Detailed setup steps for production (systemd, Nginx, Redis, RSA keys) are in [`docs/SETUP.md`](./docs/SETUP.md).
 
-## Usage
+## Admin Panel
 
-### Admin Panel
+Access at `https://<your-auth-domain>/login`:
 
-Access the admin panel at `https://<your-auth-domain>/admin` to manage:
-- Users and profiles
-- Organizations and positions
-- OAuth clients
-- Roles and permissions
+| Page | URL | Required role |
+|------|-----|---------------|
+| Dashboard | `/dashboard` | any |
+| Profile | `/profile` | any |
+| Users | `/users` | admin |
+| Organizations / Positions | `/organizations`, `/positions` | admin |
+| Applications (OAuth clients) | `/applications` | admin |
+| System settings (Google SSO, SES, tokens) | `/settings` | admin |
+| Guide | `/guide` | admin |
 
-### OIDC Integration (Client Example)
+## OIDC Integration (Relying Party example)
 
 ```typescript
-// auth.config.ts (NextAuth.js)
+// NextAuth.js v5 / Auth.js
 import NextAuth from "next-auth";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -88,63 +100,59 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       id: "auth-provider",
       name: "Auth Provider",
       type: "oidc",
-      issuer: process.env.AUTH_PROVIDER_ISSUER,
-      clientId: process.env.AUTH_PROVIDER_ID,
+      issuer: process.env.AUTH_PROVIDER_ISSUER,        // https://auth.senku.work
+      clientId: process.env.AUTH_PROVIDER_ID,          // registered via Admin > Applications
       clientSecret: process.env.AUTH_PROVIDER_SECRET,
-      authorization: {
-        params: { scope: "openid profile email custom" }
-      },
-    }
+      authorization: { params: { scope: "openid profile email custom" } },
+    },
   ],
 });
 ```
 
-## API Reference
+After registering the client, grant the user access via Admin Panel → Users → Application Access (`UserApplicationAccess`).
 
-### Authentication APIs
+## API Reference (summary)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | /api/auth/register | Register new user |
-| POST | /api/auth/login | Login |
-| POST | /api/auth/logout | Logout |
-| POST | /api/auth/refresh | Refresh tokens |
-| GET | /api/auth/me | Get current user |
+> Detailed request/response schema is in [`docs/API.md`](./docs/API.md).
 
-### OAuth 2.0 / OIDC Endpoints
+### Public OAuth 2.0 / OIDC
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | /oauth/authorize | Authorization endpoint |
-| POST | /oauth/token | Token endpoint |
-| GET | /oauth/userinfo | UserInfo endpoint |
-| GET | /.well-known/openid-configuration | OIDC Discovery |
-| GET | /.well-known/jwks.json | JSON Web Key Set |
+| GET | `/.well-known/openid-configuration` | OIDC Discovery |
+| GET | `/.well-known/jwks.json` | JSON Web Key Set |
+| GET | `/oauth/authorize` | Authorization endpoint (PKCE S256) |
+| POST | `/oauth/token` | Token endpoint (rate limited: 20/min/IP) |
+| GET | `/oauth/userinfo` | UserInfo endpoint |
+| POST | `/oauth/revoke` | Token revocation (RFC 7009) |
+| POST | `/oauth/introspect` | Token introspection (RFC 7662) |
 
-### User Management APIs
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | /api/users | List users |
-| POST | /api/users | Create user |
-| GET | /api/users/:id | Get user details |
-| PATCH | /api/users/:id | Update user |
-| DELETE | /api/users/:id | Delete user (soft) |
-
-### Organization / Position APIs
+### Public callback endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | /api/organizations | List organizations |
-| POST | /api/organizations | Create organization |
-| GET | /api/positions | List positions |
-| POST | /api/positions | Create position |
+| GET | `/api/auth/google/callback` | Google OAuth callback |
+| GET | `/api/auth/verify-email` | Email verification link landing |
 
-## Notes
+### Admin-internal (same-origin only)
 
-- **JWT_SECRET**: Use a strong random string (64+ characters)
-- **HTTPS**: Required for production
-- **Database**: Configure proper PostgreSQL backups
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/admin/auth/login` | Admin panel login |
+| POST | `/api/admin/auth/register` | Self-registration |
+| POST | `/api/admin/auth/logout` | Admin panel logout |
+| POST | `/api/admin/auth/refresh` | Refresh admin token |
+| GET | `/api/admin/auth/me` | Current admin user |
+| GET | `/api/admin/auth/google` | Begin Google SSO |
+
+> **Note**: Legacy `/api/auth/{login,logout,me,refresh,verify,register,google,google/status}` return **410 Gone** (`LEGACY_API_ENABLED=false`). Use OAuth/OIDC endpoints for external integrations.
+
+## Documentation
+
+- [`docs/document.md`](./docs/document.md) - System overview
+- [`docs/API.md`](./docs/API.md) - Complete API reference
+- [`docs/SECURITY.md`](./docs/SECURITY.md) - Security design & operations
+- [`docs/SETUP.md`](./docs/SETUP.md) - Detailed setup (PostgreSQL, Redis, systemd, Nginx)
 
 ## License
 
@@ -152,88 +160,96 @@ MIT License
 
 ---
 
-# auth - ユーザー管理基盤
+# auth - 認証基盤（OAuth 2.0 / OpenID Connect）
+
+[English version is above](#auth---oauth-20--openid-connect-authentication-service)
 
 ## 概要
 
-Next.js 15で構築された統合ユーザー管理基盤です。認証・認可・ユーザー管理機能を提供し、複数のサービスで共通のユーザー基盤として機能します。
+Next.js 15 で構築された **OAuth 2.0 / OpenID Connect (OIDC) 認証基盤**。複数の社内アプリケーションに対する **OpenID Provider (OP)** として機能し、シングルサインオン（SSO）と一元的なユーザー管理を提供します。
 
 ### 主な機能
 
-- **認証機能**
-  - ユーザー登録・ログイン・ログアウト
-  - JWT (HS256) アクセストークン（有効期限15分）
-  - Opaqueリフレッシュトークン（有効期限30日）
-  - argon2によるパスワードハッシュ化
-  - アカウントロック機能（5回失敗で30分ロック）
+- **OAuth 2.0 / OpenID Connect**
+  - Authorization Code Flow + **PKCE（S256のみ）**
+  - Refresh Token Grant（ローテーション有効）
+  - OIDC Discovery、JWKS、Revocation (RFC 7009)、Introspection (RFC 7662)
 
-- **OAuth 2.0 / OpenID Connect (OIDC)**
-  - Authorization Code Flow with PKCE
-  - クライアント管理機能
-  - scopeベースの権限管理
-  - カスタムスコープ（組織・プロフィール情報）
+- **認証・トークン**
+  - アクセストークン: **JWT (RS256)**、有効期限15分
+  - ID Token: JWT (RS256)、有効期限1時間
+  - リフレッシュトークン: Opaque、30日、ローテーション
+  - パスワード: **argon2id**
+  - アカウントロック: 5回失敗で15分ロック
+  - Cookie: HttpOnly + Secure + SameSite=Lax
 
-- **ユーザー管理**
-  - ユーザープロフィール（表示名、アバター、入社日等）
-  - 組織・役職の多対多管理
-  - グローバルロール・権限管理
-  - ユーザー検索・フィルタリング
+- **ユーザー・アクセス管理**
+  - メール検証付き新規登録、Google SSO
+  - RBAC（GlobalRole + Permissions）
+  - アプリ単位の利用許可（`UserApplicationAccess`）
+  - 組織・役職管理
 
-- **管理機能**
-  - 組織階層管理
-  - 役職マスタ管理
-  - 権限マスタ管理
-  - 監査ログ
+- **本番運用機能**
+  - Redis 分散レートリミット (`ioredis`)
+  - SecurityLog による監査（login / token issued / refreshed / revoked 等）
+  - CORS ホワイトリスト（ワイルドカード不可）
+  - systemd + Nginx HTTPS リバプロ
 
 ### 技術スタック
 
-- Next.js 15 / React 19
-- PostgreSQL + Prisma ORM
-- TypeScript
-- Tailwind CSS
+- Next.js 15.5 / React 19 / TypeScript 5
+- PostgreSQL 16+（Prisma 6）
+- Redis 7+
+- `jose`（RS256 JWT）、`argon2`
+- Tailwind CSS + shadcn/ui
 
 ## 前提条件
 
 - Node.js 20+
-- PostgreSQL 15+
+- PostgreSQL 16+
+- Redis 7+（`requirepass` 設定）
+- Nginx（HTTPS リバプロ）
 
-## インストール
+## クイックスタート
 
 ```bash
-# 1. リポジトリをクローン
-git clone <your-repo-url>
-cd auth
-
-# 2. 依存パッケージをインストール
+# 1. 依存導入
 npm install
 
-# 3. 環境変数を設定
-cp .env.local.example .env.local
-# .env.local を編集
+# 2. 環境変数（詳細は docs/SETUP.md）
+# .env.local: DATABASE_URL, OAUTH_ISSUER, OAUTH_KEY_ID,
+#             CORS_ALLOWED_ORIGINS, LEGACY_API_ENABLED=false,
+#             REDIS_URL, JWT_SECRET, ENCRYPTION_SECRET
 
-# 4. データベースマイグレーション
+# 3. マイグレーション
 npx prisma migrate deploy
+npx prisma generate
 
-# 5. 開発サーバー起動
-npm run dev
+# 4. ビルド & 起動
+npm run build
+npm run start  # port 3019
 ```
 
-サーバーは http://localhost:3019 で起動します。
+本番構築（systemd、Nginx、Redis、RSA鍵）は [`docs/SETUP.md`](./docs/SETUP.md) を参照。
 
-## 使い方
+## 管理画面
 
-### 管理画面
+`https://<your-auth-domain>/login` からアクセス：
 
-`https://<your-auth-domain>/admin` から以下を管理できます：
-- ユーザーとプロフィール
-- 組織と役職
-- OAuthクライアント
-- ロールと権限
+| ページ | URL | 必要ロール |
+|--------|-----|------------|
+| ダッシュボード | `/dashboard` | 全員 |
+| プロフィール | `/profile` | 全員 |
+| ユーザー管理 | `/users` | admin |
+| 組織・役職 | `/organizations`, `/positions` | admin |
+| アプリケーション（OAuthクライアント） | `/applications` | admin |
+| システム設定（Google SSO, SES, トークン） | `/settings` | admin |
+| 使い方 | `/guide` | admin |
 
-### OIDC連携（クライアント側の設定例）
+## OIDC 連携（クライアント側の設定例）
 
 ```typescript
-// auth.config.ts (NextAuth.js)
+// NextAuth.js v5 / Auth.js
 import NextAuth from "next-auth";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -242,63 +258,59 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       id: "auth-provider",
       name: "Auth Provider",
       type: "oidc",
-      issuer: process.env.AUTH_PROVIDER_ISSUER,
-      clientId: process.env.AUTH_PROVIDER_ID,
+      issuer: process.env.AUTH_PROVIDER_ISSUER,        // https://auth.senku.work
+      clientId: process.env.AUTH_PROVIDER_ID,          // 管理画面 > アプリケーションで登録
       clientSecret: process.env.AUTH_PROVIDER_SECRET,
-      authorization: {
-        params: { scope: "openid profile email custom" }
-      },
-    }
+      authorization: { params: { scope: "openid profile email custom" } },
+    },
   ],
 });
 ```
 
-## APIリファレンス
+クライアント登録後、管理画面 → ユーザー管理 から該当ユーザーに **アプリ利用権限** を付与（`UserApplicationAccess`）。
 
-### 認証API
+## API リファレンス（概要）
 
-| メソッド | エンドポイント | 説明 |
-|----------|----------------|------|
-| POST | /api/auth/register | 新規ユーザー登録 |
-| POST | /api/auth/login | ログイン |
-| POST | /api/auth/logout | ログアウト |
-| POST | /api/auth/refresh | トークン更新 |
-| GET | /api/auth/me | 現在のユーザー情報 |
+> 詳細は [`docs/API.md`](./docs/API.md) を参照。
 
-### OAuth 2.0 / OIDC エンドポイント
+### 外部公開：OAuth 2.0 / OIDC
 
-| メソッド | エンドポイント | 説明 |
-|----------|----------------|------|
-| GET | /oauth/authorize | 認可エンドポイント |
-| POST | /oauth/token | トークンエンドポイント |
-| GET | /oauth/userinfo | ユーザー情報エンドポイント |
-| GET | /.well-known/openid-configuration | OIDC Discovery |
-| GET | /.well-known/jwks.json | JSON Web Key Set |
+| Method | Endpoint | 説明 |
+|--------|----------|------|
+| GET | `/.well-known/openid-configuration` | OIDC Discovery |
+| GET | `/.well-known/jwks.json` | JWKS |
+| GET | `/oauth/authorize` | 認可エンドポイント（PKCE S256） |
+| POST | `/oauth/token` | トークン発行（レート制限 20req/min/IP） |
+| GET | `/oauth/userinfo` | UserInfo |
+| POST | `/oauth/revoke` | トークン無効化 (RFC 7009) |
+| POST | `/oauth/introspect` | トークン状態確認 (RFC 7662) |
 
-### ユーザー管理API
+### 外部公開：コールバック
 
-| メソッド | エンドポイント | 説明 |
-|----------|----------------|------|
-| GET | /api/users | ユーザー一覧 |
-| POST | /api/users | ユーザー作成 |
-| GET | /api/users/:id | ユーザー詳細 |
-| PATCH | /api/users/:id | ユーザー更新 |
-| DELETE | /api/users/:id | ユーザー削除（論理） |
+| Method | Endpoint | 説明 |
+|--------|----------|------|
+| GET | `/api/auth/google/callback` | Google OAuth コールバック |
+| GET | `/api/auth/verify-email` | メール検証リンクの戻り |
 
-### 組織・役職API
+### 管理画面内部（同オリジンのみ）
 
-| メソッド | エンドポイント | 説明 |
-|----------|----------------|------|
-| GET | /api/organizations | 組織一覧 |
-| POST | /api/organizations | 組織作成 |
-| GET | /api/positions | 役職一覧 |
-| POST | /api/positions | 役職作成 |
+| Method | Endpoint | 説明 |
+|--------|----------|------|
+| POST | `/api/admin/auth/login` | 管理画面ログイン |
+| POST | `/api/admin/auth/register` | 自己登録 |
+| POST | `/api/admin/auth/logout` | 管理画面ログアウト |
+| POST | `/api/admin/auth/refresh` | 管理画面トークン更新 |
+| GET | `/api/admin/auth/me` | ログイン中ユーザー情報 |
+| GET | `/api/admin/auth/google` | Google SSO 開始 |
 
-## 注意事項
+> **重要**: 旧 `/api/auth/{login,logout,me,refresh,verify,register,google,google/status}` は **410 Gone** (`LEGACY_API_ENABLED=false`)。外部連携は OAuth/OIDC エンドポイントを使用してください。
 
-- **JWT_SECRET**: 強力なランダム文字列を使用（64文字以上推奨）
-- **HTTPS**: 本番環境では必須
-- **データベース**: PostgreSQLの適切なバックアップ設定を行う
+## ドキュメント
+
+- [`docs/document.md`](./docs/document.md) - システム概要
+- [`docs/API.md`](./docs/API.md) - 完全な API リファレンス
+- [`docs/SECURITY.md`](./docs/SECURITY.md) - セキュリティ設計と運用
+- [`docs/SETUP.md`](./docs/SETUP.md) - 詳細セットアップ（PostgreSQL、Redis、systemd、Nginx）
 
 ## ライセンス
 
